@@ -4391,7 +4391,10 @@ void ApiWrap::sendShortcutMessages(
 void ApiWrap::sendRichMessage(
 		std::shared_ptr<const Iv::RichPage> page,
 		const MTPInputRichMessage &richMessage,
-		SendAction action) {
+		SendAction action,
+		Data::FileOrigin fileOrigin,
+		bool recoverToDraft,
+		Fn<void(bool)> finished) {
 	Expects(page != nullptr);
 
 	StripEphemeralReply(_session, action.replyTo);
@@ -4429,7 +4432,13 @@ void ApiWrap::sendRichMessage(
 	}, TextWithEntities(), MTP_messageMediaEmpty());
 	item->applyLocalRichPage(std::move(page));
 
-	sendRichMessage(item, richMessage, action);
+	sendRichMessage(
+		item,
+		richMessage,
+		action,
+		std::move(fileOrigin),
+		recoverToDraft,
+		std::move(finished));
 
 	_session->data().sendHistoryChangeNotifications();
 	_session->changes().historyUpdated(
@@ -4442,7 +4451,10 @@ void ApiWrap::sendRichMessage(
 void ApiWrap::sendRichMessage(
 		not_null<HistoryItem*> item,
 		const MTPInputRichMessage &richMessage,
-		SendAction action) {
+		SendAction action,
+		Data::FileOrigin fileOrigin,
+		bool recoverToDraft,
+		Fn<void(bool)> finished) {
 	Expects(item->history() == action.history);
 
 	StripEphemeralReply(_session, action.replyTo);
@@ -4516,11 +4528,13 @@ void ApiWrap::sendRichMessage(
 				Api::UnixtimeFromMsgId(response.outerMsgId));
 		}
 	};
-	const auto richDraftOrigin = Data::FileOrigin(Data::FileOriginCloudDraft{
-		.peerId = peer->id,
-		.topicRootId = draftTopicRootId,
-		.monoforumPeerId = draftMonoforumPeerId,
-	});
+	const auto richMediaOrigin = fileOrigin
+		? std::move(fileOrigin)
+		: Data::FileOrigin(Data::FileOriginCloudDraft{
+			.peerId = peer->id,
+			.topicRootId = draftTopicRootId,
+			.monoforumPeerId = draftMonoforumPeerId,
+		});
 	const auto serializeCurrent = [=]() -> std::optional<MTPInputRichMessage> {
 		const auto fullPage = item->fullRichPage();
 		const auto page = fullPage ? fullPage : item->richPage();
@@ -4540,7 +4554,9 @@ void ApiWrap::sendRichMessage(
 	const auto recoverRichFailure = [=](const QString &type) {
 		if (const auto failed = _session->data().message(itemId)) {
 			const auto fullPage = failed->fullRichPage();
-			if (const auto page = fullPage ? fullPage : failed->richPage()) {
+			if (const auto page = recoverToDraft
+					? (fullPage ? fullPage : failed->richPage())
+					: nullptr) {
 				auto draft = Data::Draft();
 				draft.reply.topicRootId = draftTopicRootId;
 				draft.reply.monoforumPeerId = draftMonoforumPeerId;
@@ -4593,12 +4609,15 @@ void ApiWrap::sendRichMessage(
 				std::move(currentRichMessage)),
 			[=](const MTPUpdates &result, const MTP::Response &response) {
 				finishCloudDraft(response);
+				if (finished) {
+					finished(true);
+				}
 			},
 			[=](const MTP::Error &error, const MTP::Response &response) {
 				if (!refreshed
 					&& (error.code() == 400)
 					&& error.type().startsWith(u"FILE_REFERENCE_"_q)) {
-					refreshFileReference(richDraftOrigin, [=](const auto &) {
+					refreshFileReference(richMediaOrigin, [=](const auto &) {
 						if (const auto refreshedRichMessage = serializeCurrent()) {
 							repeatRequest(
 								repeatRequest,
@@ -4607,12 +4626,18 @@ void ApiWrap::sendRichMessage(
 						} else {
 							recoverRichFailure(error.type());
 							finishCloudDraft(response);
+							if (finished) {
+								finished(false);
+							}
 						}
 					});
 					return;
 				}
 				recoverRichFailure(error.type());
 				finishCloudDraft(response);
+				if (finished) {
+					finished(false);
+				}
 			});
 	};
 	performRequest(performRequest, richMessage, false);

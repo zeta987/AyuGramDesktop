@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_common.h"
 #include "base/timer.h"
 #include "mtproto/sender.h"
+#include "data/data_file_origin.h"
 #include "data/stickers/data_stickers_set.h"
 #include "data/data_messages.h"
 
@@ -393,11 +394,17 @@ public:
 	void sendRichMessage(
 		not_null<HistoryItem*> item,
 		const MTPInputRichMessage &richMessage,
-		SendAction action);
+		SendAction action,
+		Data::FileOrigin fileOrigin = {},
+		bool recoverToDraft = true,
+		Fn<void(bool)> finished = nullptr);
 	void sendRichMessage(
 		std::shared_ptr<const Iv::RichPage> page,
 		const MTPInputRichMessage &richMessage,
-		SendAction action);
+		SendAction action,
+		Data::FileOrigin fileOrigin = {},
+		bool recoverToDraft = true,
+		Fn<void(bool)> finished = nullptr);
 	void sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId = std::nullopt);

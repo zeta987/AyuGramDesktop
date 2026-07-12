@@ -12,7 +12,9 @@
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history_item.h"
+#include "iv/iv_rich_page.h"
 #include "main/main_session.h"
+#include "platform/platform_translate_provider.h"
 
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QString>
@@ -36,7 +38,40 @@ BaseTranslator *translatorForProvider(TranslationProvider provider) {
 	return nullptr;
 }
 
+[[nodiscard]] QByteArray TranslationSourceHash(
+		const TextWithEntities &source) {
+	auto identity = source.text.toUtf8();
+	for (const auto &entity : source.entities) {
+		identity.append('\0').append(QByteArray::number(
+			static_cast<int>(entity.type())));
+		identity.append(':').append(QByteArray::number(entity.offset()));
+		identity.append(':').append(QByteArray::number(entity.length()));
+		identity.append(':').append(entity.data().toUtf8());
+	}
+	return QCryptographicHash::hash(
+		identity,
+		QCryptographicHash::Sha1).toHex();
+}
+
 } // namespace
+
+TextWithEntities TranslationSourceForItem(
+		not_null<HistoryItem*> item) {
+	if (const auto page = item->fullRichPage()) {
+		return Iv::FlattenRichPageToSimpleText(*page);
+	}
+	if (const auto page = item->richPage()) {
+		return Iv::FlattenRichPageToSimpleText(*page);
+	}
+	return item->originalText();
+}
+
+bool UseTelegramRichTranslation() {
+	const auto provider = AyuSettings::getInstance().translationProvider();
+	return (provider == TranslationProvider::Telegram)
+		|| ((provider == TranslationProvider::Native)
+			&& !Platform::IsTranslateProviderAvailable());
+}
 
 TranslateManager::Builder::Builder(
 	TranslateManager &manager,
@@ -121,8 +156,11 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 			};
 			texts.push_back(textWithEntities);
 
-			// todo: entities are not considered in cache key
-			const auto key = generateCacheKey(text, fromLang, toLang);
+			const auto key = generateCacheKey(
+				textWithEntities,
+				fromLang,
+				toLang,
+				req._provider);
 			cacheKeys.push_back(key);
 
 			if (const auto cached = getFromCache(key)) {
@@ -138,10 +176,16 @@ mtpRequestId TranslateManager::performTranslation(Builder &req) {
 			for (int i = 0; i < req.ids().v.size(); ++i) {
 				const auto msgId = req.ids().v[i].v;
 				if (const auto message = req.session()->data().message(peerData->id, msgId)) {
-					const auto textWithEntities = message->originalText();
+					const auto textWithEntities = TranslationSourceForItem(message);
 					texts.push_back(textWithEntities);
 
-					const auto key = generateMessageCacheKey(peerData->id, msgId, fromLang, toLang);
+					const auto key = generateMessageCacheKey(
+						peerData->id,
+						msgId,
+						textWithEntities,
+						fromLang,
+						toLang,
+						req._provider);
 					cacheKeys.push_back(key);
 
 					if (const auto cached = getFromCache(key)) {
@@ -280,16 +324,31 @@ void TranslateManager::init() {
 	if (!instance) instance = new TranslateManager;
 }
 
-QString TranslateManager::generateCacheKey(const QString &text, const QString &fromLang, const QString &toLang) const {
-	const auto textHash = QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex();
-	return QStringLiteral("%1_%2_%3").arg(QString::fromLatin1(textHash), fromLang, toLang);
+QString TranslateManager::generateCacheKey(
+		const TextWithEntities &source,
+		const QString &fromLang,
+		const QString &toLang,
+		TranslationProvider provider) const {
+	return QStringLiteral("%1_%2_%3_%4").arg(
+		QString::fromLatin1(TranslationSourceHash(source)),
+		fromLang,
+		toLang).arg(static_cast<int>(provider));
 }
 
 QString TranslateManager::generateMessageCacheKey(PeerId peerId,
-												  MsgId msgId,
-												  const QString &fromLang,
-												  const QString &toLang) const {
-	return QStringLiteral("%1_%2_%3_%4").arg(peerId.value).arg(msgId.bare).arg(fromLang, toLang);
+		MsgId msgId,
+		const TextWithEntities &source,
+		const QString &fromLang,
+		const QString &toLang,
+		TranslationProvider provider) const {
+	return QStringLiteral("%1_%2_%3_%4_%5_%6")
+		.arg(peerId.value)
+		.arg(msgId.bare)
+		.arg(
+			QString::fromLatin1(TranslationSourceHash(source)),
+			fromLang,
+			toLang)
+		.arg(static_cast<int>(provider));
 }
 
 void TranslateManager::insertToCache(const QString &key, const CacheEntry &entry) {

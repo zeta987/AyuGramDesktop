@@ -371,16 +371,32 @@ void forwardMessages(
 			return;
 		}
 
+		auto message = Api::MessageToSend(action);
+		const auto richResult = AyuSync::sendRichMessageSync(
+			session,
+			item,
+			message.action,
+			draft.options);
+		if (richResult == AyuSync::RichSendResult::Succeeded) {
+			state->sentMessages = i + 1;
+			state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
+			continue;
+		}
+		if (richResult == AyuSync::RichSendResult::Pending) {
+			continue;
+		}
+		const auto richPlainFallback
+			= (richResult == AyuSync::RichSendResult::PlainFallback)
+			|| (richResult == AyuSync::RichSendResult::Failed);
+		message.action.options.invertCaption = item->invertMedia();
+
 		auto extractedText = extractText(item);
 		if (extractedText.empty() && !mediaDownloadable(item->media())) {
 			continue;
 		}
 
-		auto message = Api::MessageToSend(Api::SendAction(session->data().history(peer->id)));
-		message.action.options.invertCaption = item->invertMedia();
-		message.action.replyTo = action.replyTo;
-
-		if (draft.options != Data::ForwardOptions::NoNamesAndCaptions) {
+		if (draft.options != Data::ForwardOptions::NoNamesAndCaptions
+			|| richPlainFallback) {
 			message.textWithTags = extractedText;
 		}
 

@@ -28,7 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // AyuGram includes
 #include "ayu/ayu_settings.h"
-
+#include "ayu/features/translator/ayu_translator.h"
 
 namespace HistoryView {
 namespace {
@@ -151,7 +151,7 @@ bool TranslateTracker::add(
 		i->second.generation = _generation;
 		return true;
 	}
-	const auto &text = item->originalText().text;
+	const auto text = Ayu::Translator::TranslationSourceForItem(item).text;
 	_itemsForRecognize.emplace(id, ItemForRecognize{
 		.generation = _generation,
 		.id = (_trackingLanguage.current()
@@ -168,9 +168,11 @@ void TranslateTracker::switchTranslation(
 	_history->session().api().transcribes().checkSummaryToTranslate(
 		item->fullId());
 	if (item->translationShowRequiresRequest(id)) {
+		const auto source = Ayu::Translator::TranslationSourceForItem(item);
 		_itemsToRequest.emplace(item->fullId(), ItemToRequest{
-			.length = int(item->originalText().text.size()),
-			.rich = (_provider->supportsMessageId()
+			.length = int(source.text.size()),
+			.rich = (Ayu::Translator::UseTelegramRichTranslation()
+				&& _provider->supportsMessageId()
 				&& (item->richPage() != nullptr)),
 		});
 	}
@@ -348,7 +350,7 @@ void TranslateTracker::requestSome() {
 				_provider.get(),
 				session->data().peer(id.peer),
 				id.msg,
-				item->originalText()));
+				Ayu::Translator::TranslationSourceForItem(item)));
 			ids.push_back(id);
 		}
 	}
@@ -371,9 +373,14 @@ void TranslateTracker::requestSome() {
 			}
 			const auto &id = _requested[index];
 			if (const auto item = owner->message(id)) {
-				item->translationDone(
-					to,
-					result.text.value_or(TextWithEntities()));
+				auto translated = result.text.value_or(TextWithEntities());
+				if (item->richPage() && !translated.empty()) {
+					auto page = std::make_shared<Iv::RichPage>(
+						Iv::SplitTextIntoRichPage(std::move(translated)));
+					item->translationDone(to, std::move(page));
+				} else {
+					item->translationDone(to, std::move(translated));
+				}
 			}
 		},
 		[=] {

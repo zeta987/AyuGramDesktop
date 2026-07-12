@@ -4362,12 +4362,16 @@ bool CanAuthorRichMessages(not_null<Main::Session*> session) {
 	return RichMessagePostingMode(session) != RichMessagePosting::Disabled;
 }
 
+bool CanSendRichMessages(not_null<Main::Session*> session) {
+	return CanAuthorRichMessages(session) && CanUseRichMessages(session);
+}
+
 bool CheckRichMessagesPremium(
 		not_null<Window::SessionController*> controller) {
 	if (!CanAuthorRichMessages(&controller->session())) {
 		return false;
 	}
-	if (CanUseRichMessages(&controller->session())) {
+	if (CanSendRichMessages(&controller->session())) {
 		return true;
 	}
 	ShowRichMessagesPremiumToast(controller->uiShow());

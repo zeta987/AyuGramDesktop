@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/translate_box_content.h"
 #include "lang/translate_provider.h"
 
+#include "ayu/features/translator/ayu_translator.h"
 #include "base/weak_ptr.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
@@ -424,8 +425,11 @@ void TranslateBox(
 		rpl::variable<LanguageId> to;
 	};
 	const auto state = box->lifetime().make_state<State>(&peer->session());
-	if (IsServerMsgId(msgId) && state->provider->supportsMessageId()) {
-		if (const auto item = peer->owner().message(peer->id, msgId)) {
+	const auto item = peer->owner().message(peer->id, msgId);
+	if (IsServerMsgId(msgId)
+		&& state->provider->supportsMessageId()
+		&& Ayu::Translator::UseTelegramRichTranslation()) {
+		if (item) {
 			if (const auto page = item->richPage()) {
 				if (TranslateRichBox(
 						box,
@@ -438,6 +442,9 @@ void TranslateBox(
 				}
 			}
 		}
+	}
+	if (item && item->richPage()) {
+		text = Ayu::Translator::TranslationSourceForItem(item);
 	}
 	state->to = ChooseTranslateTo(peer->owner().history(peer));
 	const auto request = std::make_shared<TranslateProviderRequest>(

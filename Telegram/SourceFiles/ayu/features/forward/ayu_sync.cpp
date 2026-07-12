@@ -13,14 +13,20 @@
 #include "core/core_settings.h"
 #include "core/file_utilities.h"
 #include "data/data_document.h"
+#include "data/data_file_origin.h"
 #include "data/data_photo.h"
 #include "data/data_photo_media.h"
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "iv/editor/iv_editor_session.h"
+#include "iv/iv_rich_message_serializer.h"
+#include "iv/iv_rich_page.h"
 #include "main/main_session.h"
 #include "storage/file_download_mtproto.h"
 #include "storage/localimageloader.h"
+
+#include <atomic>
 
 namespace AyuSync {
 
@@ -239,6 +245,67 @@ void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&mess
 
 
 	waitForMsgSync(session, action);
+}
+
+RichSendResult sendRichMessageSync(
+		not_null<Main::Session*> session,
+		not_null<HistoryItem*> item,
+		const Api::SendAction &action,
+		Data::ForwardOptions options) {
+	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto result = std::make_shared<std::atomic<RichSendResult>>(
+		RichSendResult::Pending);
+
+	crl::on_main([=] {
+		const auto finish = [=](RichSendResult value) {
+			result->store(value, std::memory_order_release);
+			latch->countDown();
+		};
+		const auto fullPage = item->fullRichPage();
+		const auto inlinePage = item->richPage();
+		if (!fullPage && !inlinePage) {
+			finish(RichSendResult::NoRichMessage);
+			return;
+		}
+		if (options == Data::ForwardOptions::NoNamesAndCaptions
+			|| !Iv::Editor::CanSendRichMessages(session)) {
+			finish(RichSendResult::PlainFallback);
+			return;
+		}
+		const auto page = fullPage
+			? fullPage
+			: (inlinePage && !inlinePage->part)
+			? inlinePage
+			: nullptr;
+		if (!page) {
+			finish(RichSendResult::PlainFallback);
+			return;
+		}
+		const auto serialized = Iv::SerializeInputRichMessage(
+			session,
+			*page,
+			Iv::SerializeInputRichMessageMode::FinalSubmit);
+		if (serialized.status != Iv::SerializeInputRichMessageStatus::Success
+			|| !serialized.value) {
+			finish(RichSendResult::PlainFallback);
+			return;
+		}
+		session->api().sendRichMessage(
+			page,
+			*serialized.value,
+			action,
+			Data::FileOrigin(item->fullId()),
+			false,
+			[=](bool success) {
+				finish(success
+					? RichSendResult::Succeeded
+					: RichSendResult::Failed);
+			});
+	});
+
+	return latch->await(std::chrono::minutes(5))
+		? result->load(std::memory_order_acquire)
+		: RichSendResult::Pending;
 }
 
 void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action) {

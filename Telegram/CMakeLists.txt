@@ -113,6 +113,8 @@ set(ayugram_files
         ayu/utils/ayu_mapper.cpp
         ayu/utils/ayu_mapper.h
         ayu/utils/qt_key_modifiers_extended.h
+        ayu/utils/rich_message_media.cpp
+        ayu/utils/rich_message_media.h
         ayu/utils/telegram_helpers.cpp
         ayu/utils/telegram_helpers.h
         ayu/utils/windows_utils.cpp

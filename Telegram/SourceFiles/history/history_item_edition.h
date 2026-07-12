@@ -11,6 +11,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <memory>
 
+namespace tl {
+template <typename bare>
+class boxed;
+} // namespace tl
+
+class MTPrichMessage;
+using MTPRichMessage = tl::boxed<MTPrichMessage>;
+
 namespace Iv {
 struct RichPage;
 } // namespace Iv
@@ -45,6 +53,7 @@ struct HistoryMessageEdition {
 	HistoryMessageRepliesData replies;
 	HistoryMessageSuggestInfo suggest;
 	std::shared_ptr<const Iv::RichPage> richPage;
+	std::shared_ptr<const MTPRichMessage> richMessageSource;
 	const MTPMessageMedia *mtpMedia = nullptr;
 	const MTPMessageReactions *mtpReactions = nullptr;
 	const MTPFactCheck *mtpFactcheck = nullptr;

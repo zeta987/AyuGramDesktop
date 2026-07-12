@@ -21,6 +21,7 @@
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/view/history_view_element.h"
+#include "iv/iv_rich_page.h"
 #include "ui/basic_click_handlers.h"
 #include "ui/text/text_utilities.h"
 
@@ -109,16 +110,38 @@ void GenerateItems(
 									MTP_messageMediaEmpty());
 	};
 
-	const auto addSimpleTextMessage = [&](TextWithEntities &&text)
-	{
-		addPart(makeSimpleTextMessage(std::move(text)));
-	};
-
-	const auto text = QString::fromStdString(message.text);
-	auto textAndEntities = Ui::Text::WithEntities(text);
-	const auto entities = AyuMapper::deserializeTextWithEntities(message.textEntities);
-	textAndEntities.entities = Api::EntitiesFromMTP(&history->session(), entities.v);
-	addSimpleTextMessage(std::move(textAndEntities));
+	auto textAndEntities = Ui::Text::WithEntities(
+		QString::fromStdString(message.text));
+	if (!message.textEntities.empty()) {
+		const auto entities = AyuMapper::deserializeTextWithEntities(
+			message.textEntities);
+		textAndEntities.entities = Api::EntitiesFromMTP(
+			&history->session(),
+			entities.v);
+	}
+	auto richMessage = AyuMapper::deserializeRichMessage(
+		message.richMessageSerialized);
+	auto richPage = richMessage
+		? Iv::ParseRichPage(&history->session(), *richMessage)
+		: nullptr;
+	if (richPage && richPage->part) {
+		auto archivedPage = std::make_shared<Iv::RichPage>(*richPage);
+		archivedPage->part = false;
+		richPage = std::move(archivedPage);
+	}
+	if (richPage) {
+		textAndEntities = Iv::FlattenRichPageSummary(richPage);
+	} else if (!message.richMessageSummary.empty()) {
+		textAndEntities = Ui::Text::WithEntities(
+			QString::fromUtf8(
+				message.richMessageSummary.data(),
+				int(message.richMessageSummary.size())));
+	}
+	const auto item = makeSimpleTextMessage(std::move(textAndEntities));
+	if (richPage) {
+		item->setRichPage(std::move(richPage), std::move(richMessage));
+	}
+	addPart(item);
 }
 
 } // namespace MessageHistory

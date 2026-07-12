@@ -40,6 +40,7 @@ public:
 		const MTPDsendMessageRichMessageDraftAction &data);
 
 	[[nodiscard]] bool hasFor(not_null<HistoryItem*> item) const;
+	[[nodiscard]] bool contains(not_null<HistoryItem*> item) const;
 	void applyItemRemoved(not_null<HistoryItem*> item);
 	HistoryItem *adoptIncoming(const MTPDmessage &data);
 
@@ -85,6 +86,7 @@ private:
 
 	const not_null<History*> _history;
 	base::flat_map<uint64, Draft> _drafts;
+	HistoryItem *_adopting = nullptr;
 
 	base::Timer _checkTimer;
 

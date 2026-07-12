@@ -31,6 +31,7 @@ HistoryMessageEdition::HistoryMessageEdition(
 	mtpFactcheck = message.vfactcheck();
 	if (const auto data = message.vrich_message()) {
 		richPage = Iv::ParseRichPage(session, *data);
+		richMessageSource = std::make_shared<MTPRichMessage>(*data);
 	}
 	views = message.vviews().value_or(-1);
 	forwards = message.vforwards().value_or(-1);

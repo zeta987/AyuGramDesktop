@@ -213,6 +213,18 @@ bool HistoryStreamedDrafts::hasFor(not_null<HistoryItem*> item) const {
 	return false;
 }
 
+bool HistoryStreamedDrafts::contains(not_null<HistoryItem*> item) const {
+	if (_adopting == item) {
+		return true;
+	}
+	for (const auto &[randomId, draft] : _drafts) {
+		if (draft.message == item) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void HistoryStreamedDrafts::applyItemRemoved(not_null<HistoryItem*> item) {
 	for (auto i = begin(_drafts); i != end(_drafts); ++i) {
 		if (i->second.message == item) {
@@ -317,6 +329,7 @@ HistoryItem *HistoryStreamedDrafts::adoptIncoming(
 		return nullptr;
 	}
 	const auto item = best->second.message.get();
+	_adopting = item;
 	_drafts.erase(best);
 
 	item->setRealId(data.vid().v);
@@ -327,6 +340,7 @@ HistoryItem *HistoryStreamedDrafts::adoptIncoming(
 		sublist->applyMaybeLast(item);
 	}
 	_history->owner().updateExistingMessage(data);
+	_adopting = nullptr;
 	_history->newItemAdded(item, NewAddType::StreamedDraftFinish);
 
 	if (_drafts.empty()) {

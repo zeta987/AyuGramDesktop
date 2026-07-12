@@ -27,6 +27,14 @@ class ChannelData;
 class VoiceSeekClickHandler;
 class ReplyKeyboard;
 
+namespace tl {
+template <typename bare>
+class boxed;
+} // namespace tl
+
+class MTPrichMessage;
+using MTPRichMessage = tl::boxed<MTPrichMessage>;
+
 namespace Ui {
 struct ChatPaintContext;
 class ChatStyle;
@@ -157,6 +165,7 @@ struct HistoryMessageRichPageSource
 : RuntimeComponent<HistoryMessageRichPageSource, HistoryItem> {
 	std::shared_ptr<const Iv::RichPage> page;
 	std::shared_ptr<const Iv::RichPage> fullPage;
+	std::shared_ptr<const MTPRichMessage> richMessage;
 	std::optional<Data::FileOriginCloudDraft> draftOrigin;
 	uint64 fullPageVersion = 0;
 	bool canEdit = false;

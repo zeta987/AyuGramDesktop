@@ -1503,6 +1503,7 @@ auto Instance::processReceivedRichMessage(
 	const auto owner = &session->data();
 	auto processed = ProcessReceivedRichMessageResult();
 	auto page = std::shared_ptr<const RichPage>();
+	auto richMessageSource = std::shared_ptr<const MTPRichMessage>();
 	result.match([&](const MTPDmessages_messagesNotModified &) {
 		LOG(("API Error: received messages.messagesNotModified!"));
 	}, [&](const auto &data) {
@@ -1518,6 +1519,9 @@ auto Instance::processReceivedRichMessage(
 			}
 			const auto richMessage = parsed.vrich_message();
 			page = richMessage ? ParseRichPage(session, *richMessage) : nullptr;
+			richMessageSource = richMessage
+				? std::make_shared<MTPRichMessage>(*richMessage)
+				: nullptr;
 			break;
 		}
 	});
@@ -1539,7 +1543,7 @@ auto Instance::processReceivedRichMessage(
 		return processed;
 	}
 	if (page) {
-		current->setFullRichPage(page);
+		current->setFullRichPage(page, std::move(richMessageSource));
 	}
 	processed.page = std::move(page);
 	return processed;

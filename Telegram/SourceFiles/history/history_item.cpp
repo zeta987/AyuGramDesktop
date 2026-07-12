@@ -493,7 +493,9 @@ HistoryItem::HistoryItem(
 		createComponents(data);
 		if (const auto richMessage = data.vrich_message()) {
 			const auto richPage = Iv::ParseRichPage(&history->session(), *richMessage);
-			setRichPage(richPage);
+			setRichPage(
+				richPage,
+				std::make_shared<MTPRichMessage>(*richMessage));
 			setText(Iv::FlattenRichPageSummary(richPage));
 		} else {
 			setText(UnsupportedMessageText());
@@ -552,7 +554,9 @@ HistoryItem::HistoryItem(
 		}
 		if (const auto richMessage = data.vrich_message()) {
 			const auto richPage = Iv::ParseRichPage(&history->session(), *richMessage);
-			setRichPage(richPage);
+			setRichPage(
+				richPage,
+				std::make_shared<MTPRichMessage>(*richMessage));
 			setText(Iv::FlattenRichPageSummary(richPage));
 		} else if (!skipSetText) {
 			auto textWithEntities = TextWithEntities{
@@ -777,7 +781,7 @@ HistoryItem::HistoryItem(
 		return TextWithEntities();
 	}();
 	if (forwardRichPage) {
-		setRichPage(forwardRichPage);
+		setRichPage(forwardRichPage, original->richMessageSource());
 	}
 	setText(forwardText);
 
@@ -2314,7 +2318,7 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 		: _media;
 	clearFullRichPage();
 	if (edition.richPage) {
-		setRichPage(edition.richPage);
+		setRichPage(edition.richPage, edition.richMessageSource);
 	} else {
 		clearRichPage();
 	}
@@ -2587,7 +2591,8 @@ void HistoryItem::applySentMessage(
 		existingRichPage ? existingRichPage->page : nullptr,
 		(existingRichPage && existingRichPage->page)
 			? existingRichPage->fullPage
-			: nullptr);
+			: nullptr,
+		existingRichPage ? existingRichPage->richMessage : nullptr);
 	contributeToSlowmode(data.vdate().v);
 	if (!wasAlready) {
 		addToSharedMediaIndex();
@@ -2608,14 +2613,19 @@ void HistoryItem::updateSentContent(
 	updateSentContent(
 		textWithEntities,
 		media,
-		ParsedRichPage(&_history->session(), richMessage));
+		ParsedRichPage(&_history->session(), richMessage),
+		nullptr,
+		richMessage
+			? std::make_shared<MTPRichMessage>(*richMessage)
+			: nullptr);
 }
 
 void HistoryItem::updateSentContent(
 		const TextWithEntities &textWithEntities,
 		const MTPMessageMedia *media,
 		std::shared_ptr<const Iv::RichPage> richPage,
-		std::shared_ptr<const Iv::RichPage> preservedFullPage) {
+		std::shared_ptr<const Iv::RichPage> preservedFullPage,
+		std::shared_ptr<const MTPRichMessage> richMessageSource) {
 	if (isEditingMedia()) {
 		return;
 	}
@@ -2626,7 +2636,7 @@ void HistoryItem::updateSentContent(
 		_flags &= ~MessageFlag::HasPostAuthor;
 		_flags |= MessageFlag::Legacy;
 		if (richPage) {
-			setRichPage(richPage);
+			setRichPage(richPage, richMessageSource);
 			if (preservedFullPage) {
 				setFullRichPage(std::move(preservedFullPage));
 			}
@@ -2641,7 +2651,7 @@ void HistoryItem::updateSentContent(
 			_flags &= ~MessageFlag::Legacy;
 		}
 		if (richPage) {
-			setRichPage(richPage);
+			setRichPage(richPage, richMessageSource);
 			if (preservedFullPage) {
 				setFullRichPage(std::move(preservedFullPage));
 			}
@@ -4443,6 +4453,12 @@ std::shared_ptr<const Iv::RichPage> HistoryItem::richPage() const {
 	return source ? source->page : nullptr;
 }
 
+auto HistoryItem::richMessageSource() const
+-> std::shared_ptr<const MTPRichMessage> {
+	const auto source = Get<HistoryMessageRichPageSource>();
+	return source ? source->richMessage : nullptr;
+}
+
 std::shared_ptr<const Iv::RichPage> HistoryItem::fullRichPage() const {
 	const auto source = Get<HistoryMessageRichPageSource>();
 	return source ? source->fullPage : nullptr;
@@ -4474,12 +4490,19 @@ void HistoryItem::applyLocalRichPage(
 }
 
 void HistoryItem::setRichPage(std::shared_ptr<const Iv::RichPage> page) {
+	setRichPage(std::move(page), nullptr);
+}
+
+void HistoryItem::setRichPage(
+		std::shared_ptr<const Iv::RichPage> page,
+		std::shared_ptr<const MTPRichMessage> richMessage) {
 	if (page) {
 		AddComponents(HistoryMessageRichPageSource::Bit()
 			| HistoryMessageMediaForInstantView::Bit());
 		const auto source = Get<HistoryMessageRichPageSource>();
 		const auto media = Get<HistoryMessageMediaForInstantView>();
 		source->page = std::move(page);
+		source->richMessage = std::move(richMessage);
 		if (source->fullPage) {
 			++source->fullPageVersion;
 		}
@@ -4511,6 +4534,15 @@ void HistoryItem::setFullRichPage(std::shared_ptr<const Iv::RichPage> page) {
 			&& Iv::Editor::CanEditRichPage(BestRichPage(source));
 	} else {
 		clearFullRichPage();
+	}
+}
+
+void HistoryItem::setFullRichPage(
+		std::shared_ptr<const Iv::RichPage> page,
+		std::shared_ptr<const MTPRichMessage> richMessage) {
+	setFullRichPage(std::move(page));
+	if (const auto source = Get<HistoryMessageRichPageSource>()) {
+		source->richMessage = std::move(richMessage);
 	}
 }
 

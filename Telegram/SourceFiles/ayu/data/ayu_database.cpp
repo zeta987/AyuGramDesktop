@@ -61,7 +61,9 @@ auto storage = make_storage(
 		make_column("documentSerialized", &DeletedMessage::documentSerialized),
 		make_column("thumbsSerialized", &DeletedMessage::thumbsSerialized),
 		make_column("documentAttributesSerialized", &DeletedMessage::documentAttributesSerialized),
-		make_column("mimeType", &DeletedMessage::mimeType)
+		make_column("mimeType", &DeletedMessage::mimeType),
+		make_column("richMessageSerialized", &DeletedMessage::richMessageSerialized),
+		make_column("richMessageSummary", &DeletedMessage::richMessageSummary)
 	),
 	make_table<EditedMessage>(
 		"EditedMessage",
@@ -97,7 +99,9 @@ auto storage = make_storage(
 		make_column("documentSerialized", &EditedMessage::documentSerialized),
 		make_column("thumbsSerialized", &EditedMessage::thumbsSerialized),
 		make_column("documentAttributesSerialized", &EditedMessage::documentAttributesSerialized),
-		make_column("mimeType", &EditedMessage::mimeType)
+		make_column("mimeType", &EditedMessage::mimeType),
+		make_column("richMessageSerialized", &EditedMessage::richMessageSerialized),
+		make_column("richMessageSummary", &EditedMessage::richMessageSummary)
 	),
 	make_table<DeletedDialog>(
 		"DeletedDialog",
@@ -156,13 +160,18 @@ void migrateToV1(decltype(storage) &storage) {
 	}
 }
 
+void migrateToV2(decltype(storage) &storage) {
+	storage.sync_schema(true);
+}
+
 }
 
 void runMigrations(decltype(storage) &storage) {
-	constexpr int kLatestVersion = 1;
+	constexpr int kLatestVersion = 2;
 
 	const std::map<int, Fn<void(decltype(storage) &)>> migrations = {
 		{1, AyuMigrations::migrateToV1},
+		{2, AyuMigrations::migrateToV2},
 	};
 
 	int currentVersion = 0;
@@ -332,7 +341,8 @@ std::vector<DeletedMessage> getDeletedMessages(ID userId, ID dialogId, ID topicI
 			(column<DeletedMessage>(&DeletedMessage::topicId) == topicId or topicId == 0) and
 			(column<DeletedMessage>(&DeletedMessage::messageId) > minId or minId == 0) and
 			(column<DeletedMessage>(&DeletedMessage::messageId) < maxId or maxId == 0) and
-			like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\")
+			(like(column<DeletedMessage>(&DeletedMessage::text), pattern, "\\") or
+				like(column<DeletedMessage>(&DeletedMessage::richMessageSummary), pattern, "\\"))
 		),
 		order_by(column<DeletedMessage>(&DeletedMessage::messageId)).desc(),
 		limit(totalLimit)

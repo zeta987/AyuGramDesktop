@@ -17,6 +17,13 @@ class HiddenSenderInfo;
 class History;
 class DocumentData;
 class PhotoData;
+namespace tl {
+template <typename bare>
+class boxed;
+} // namespace tl
+
+class MTPrichMessage;
+using MTPRichMessage = tl::boxed<MTPrichMessage>;
 
 struct HistoryMessageReply;
 struct HistoryMessageViews;
@@ -553,6 +560,8 @@ public:
 		return _media.get();
 	}
 	[[nodiscard]] std::shared_ptr<const Iv::RichPage> richPage() const;
+	[[nodiscard]] auto richMessageSource() const
+		-> std::shared_ptr<const MTPRichMessage>;
 	[[nodiscard]] auto translatedRichPage() const
 		-> std::shared_ptr<const Iv::RichPage>;
 	[[nodiscard]] std::shared_ptr<const Iv::RichPage> fullRichPage() const;
@@ -564,7 +573,13 @@ public:
 		std::shared_ptr<const Iv::RichPage> page,
 		const TextWithEntities &summary);
 	void setRichPage(std::shared_ptr<const Iv::RichPage> page);
+	void setRichPage(
+		std::shared_ptr<const Iv::RichPage> page,
+		std::shared_ptr<const MTPRichMessage> source);
 	void setFullRichPage(std::shared_ptr<const Iv::RichPage> page);
+	void setFullRichPage(
+		std::shared_ptr<const Iv::RichPage> page,
+		std::shared_ptr<const MTPRichMessage> source);
 	void setRichDraftOrigin(Data::FileOriginCloudDraft origin);
 	void clearFullRichPage();
 	void clearRichPage();
@@ -710,7 +725,8 @@ private:
 		const TextWithEntities &textWithEntities,
 		const MTPMessageMedia *media,
 		std::shared_ptr<const Iv::RichPage> richPage,
-		std::shared_ptr<const Iv::RichPage> preservedFullPage = nullptr);
+		std::shared_ptr<const Iv::RichPage> preservedFullPage = nullptr,
+		std::shared_ptr<const MTPRichMessage> richMessageSource = nullptr);
 
 	void setReplyMarkup(
 		HistoryMessageMarkupData &&markup,

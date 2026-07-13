@@ -106,7 +106,7 @@ jobs:
           }
 
           $header = Get-Content -LiteralPath $versionHeader -Raw
-          $versionStringPattern = 'AppVersionStr\s*=\s*"{0}";' -f ([regex]::Escape($expectedVersion))
+          $versionStringPattern = 'AppVersionStr\s*=\s*"{0}";' -f ([regex]::Escape($expectedSmallVersion))
           $expectedBetaLiteral = if ($isBeta) { 'true' } else { 'false' }
           $betaPattern = 'AppBetaVersion\s*=\s*{0};' -f $expectedBetaLiteral
           $alphaPattern = '(?m)^#define\s+TDESKTOP_REQUESTED_ALPHA_VERSION\s+\(0ULL\)\s*$'
@@ -143,10 +143,11 @@ jobs:
           }
 
           $changelog = Get-Content -LiteralPath $changelogFile -Raw
+          $expectedChangelogVersion = $expectedSmallVersion
           $changelogPattern = if ($isBeta) {
-            '(?m)^{0}\s+beta\s+\(' -f [regex]::Escape($expectedVersion)
+            '(?m)^{0}[ \t]+beta[ \t]+\(' -f [regex]::Escape($expectedChangelogVersion)
           } else {
-            '(?m)^{0}\s+\(' -f [regex]::Escape($expectedVersion)
+            '(?m)^{0}[ \t]+\(' -f [regex]::Escape($expectedChangelogVersion)
           }
           $changelogMatches = [regex]::Matches($changelog, $changelogPattern)
           if ($changelogMatches.Count -ne 1) {
@@ -340,8 +341,24 @@ jobs:
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
           notes='Automated Windows x64 build. AyuGram.exe is not Authenticode-signed; verify the accompanying SHA-256 file before use.'
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          if release_is_draft="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$release_is_draft" == 'true' ]]; then
+              gh release upload "$tag" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+              edit_args=(
+                release edit "$tag"
+                --repo "$GITHUB_REPOSITORY"
+                --verify-tag
+                --draft=false
+              )
+              if [[ "$tag" == *-beta.* ]]; then
+                edit_args+=(--prerelease --latest=false)
+              else
+                edit_args+=(--prerelease=false --latest)
+              fi
+              gh "${edit_args[@]}"
+            else
+              echo "Release $tag is already published; leaving its assets unchanged."
+            fi
           else
             assets=(release-assets/*)
             args=(

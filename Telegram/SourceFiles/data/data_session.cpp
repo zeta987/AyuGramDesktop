@@ -2909,11 +2909,12 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		const auto msg = existing->originalText();
 		const auto textUnchanged = (edit.textWithEntities == msg || msg.empty());
 		const auto existingRich = existing->richPage();
+		const auto bothRich = existingRich && edit.richPage;
 		const auto richUnchanged = existingRich
 			? (edit.richPage && Iv::RichPagesEqual(*existingRich, *edit.richPage))
 			: !edit.richPage;
 
-		if (textUnchanged && richUnchanged) {
+		if (richUnchanged && (bothRich || textUnchanged)) {
 			goto proceed;
 		}
 

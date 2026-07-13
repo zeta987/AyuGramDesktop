@@ -13,7 +13,7 @@
 - 直播主模式
 - 本機 Telegram Premium
 - 翻譯器
-- 強制點擊媒體預覽與快速反應（macOS）
+- 用力點一下媒體預覽與快速反應（macOS）
 - 強化外觀
 
 還有更多功能，請參考我們的[官方文件](https://docs.ayugram.one/desktop/)。
@@ -43,14 +43,14 @@
 合併。以下是各 beta 的摘要；詳細內容請見
 [CHANGELOG.md](CHANGELOG.md)。
 
-- **beta.8** — 訊息截圖彈窗自適應視窗寬度（預覽等比縮小、儲存／複製按鈕始終可見）；App 內版本文字顯示 beta 序號；埃及聖書體字型 fallback。
-- **beta.7** — 本機 Windows Release 封裝流程（含簽署 tag 驗證）；GitHub Actions 降為手動備援；AyuGram 設定中文顯示跟隨 App 語言。
+- **beta.8** — 訊息截圖彈出視窗隨視窗寬度自動調整（預覽等比縮小、儲存／複製按鈕始終可見）；App 內版本文字顯示 beta 序號；埃及聖書體字型 fallback。
+- **beta.7** — 本機 Windows Release 封裝流程（含簽署 tag 驗證）；GitHub Actions 降為手動備援；AyuGram 設定中文顯示依 App 語言決定。
 - **beta.6** — 修正 CI 的 NASM 執行檔路徑（絕對路徑加引號）。
 - **beta.5** — 固定 libvpx 使用 NASM 3.01。
 - **beta.4** — libvpx 改用 NASM 組譯，修正 Windows Release 建置。
 - **beta.3** — CI 改用 VS 2022 runner 取得 v143 工具組。
 - **beta.2** — 將 6.9.4 整合分支合併進 dev；強化發布 CI 驗證。
-- **beta.1** — 整合上游 Telegram 6.9.4 Rich Messages（防撤回保存、訊息截圖預載、轉傳與編輯修正）；AyuGram 設定正體中文化；submodule 與版本同步。
+- **beta.1** — 整合上游 Telegram 6.9.4 Rich Messages（防撤回儲存、訊息截圖預載、轉傳與編輯修正）；AyuGram 設定正體中文化；submodule 與版本同步。
 
 ## 下載
 
@@ -94,7 +94,7 @@ brew install --cask ayugram
 
 ### Arch Linux
 
-#### 從原始碼安裝（建議）
+#### 從原始程式碼安裝（建議）
 
 從 [AUR](https://aur.archlinux.org/packages/ayugram-desktop) 安裝 `ayugram-desktop`。
 
@@ -160,7 +160,7 @@ Flatpak：https://github.com/0FL01/AyuGramDesktop-flatpak
 
 ## 致謝
 
-### Telegram 客戶端
+### Telegram 用戶端
 
 - [Telegram Desktop](https://github.com/telegramdesktop/tdesktop)
 - [Kotatogram](https://github.com/kotatogram/kotatogram-desktop)

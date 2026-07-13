@@ -29,9 +29,9 @@
 | `Message.message == ""` | Rich Message bubble、preview、copy、search 不被視為空白 | `PENDING-SERVER` |
 | cold receive | native `Iv::RichPage` renderer 顯示 | `PENDING-SERVER` |
 | restart/cache restore | 重啟後內容、media、details state 與 summary 一致 | `PENDING-RUNTIME` |
-| plain → rich edit | 保存舊 plain revision，建立 Rich component | `PENDING-SERVER` |
-| rich → rich edit | 保存舊 raw blob，更新 layout/cache | `PENDING-SERVER` |
-| rich → plain edit | 保存 rich revision並移除目前 Rich component | `PENDING-SERVER` |
+| plain → rich edit | 保留舊 plain revision，建立 Rich component | `PENDING-SERVER` |
+| rich → rich edit | 保留舊 raw blob，更新 layout/cache | `PENDING-SERVER` |
+| rich → plain edit | 保留 rich revision並移除目前 Rich component | `PENDING-SERVER` |
 | local rich send → server echo | local RichPage 不被 echo 降成空文字 | `PENDING-SERVER` |
 | partial → full | Show more 僅一個 request，失敗保留 partial，成功原地更新 | `PENDING-SERVER` |
 | streaming draft → final | 同 draft id 原地更新，final message 取代 preview | `PENDING-SERVER` |
@@ -70,12 +70,12 @@
 | Case | 期待結果 | 狀態 |
 |---|---|---|
 | schema v1 → v2 | 新 rich 欄位改 nullable，升級走 `ALTER TABLE ADD COLUMN` 保留既有 DeletedMessage/EditedMessage rows（SQL 層 ALTER 保留已以 v1 測試 db 驗證） | `PENDING-RUNTIME` |
-| deleted rich | row 同時保存 raw blob、visible summary，可重建 native bubble | `PENDING-SERVER` |
-| edited revisions | 每版 raw blob/summary 獨立保存 | `PENDING-SERVER` |
+| deleted rich | row 同時保留 raw blob、visible summary，可重建 native bubble | `PENDING-SERVER` |
+| edited revisions | 每版 raw blob/summary 獨立保留 | `PENDING-SERVER` |
 | ordinary text empty | rich blob 存在時寫入 row；media-only（無文字、無 rich blob）不再寫入空 row，media 序列化仍為 todo | `PENDING-RUNTIME` |
 | deleted-history search | searchable summary 可命中 visible text | `PENDING-RUNTIME` |
 | malformed stored blob | 使用 summary fallback，不 crash archive | `PENDING-RUNTIME` |
-| archived partial page | 顯示已保存 blocks 與 summary，不以 fake/歷史 id 請求 full page | `PASS` source inspection |
+| archived partial page | 顯示已保留 blocks 與 summary，不以 fake/歷史 id 請求 full page | `PASS` source inspection |
 
 ## Translation、filters 與 forward
 

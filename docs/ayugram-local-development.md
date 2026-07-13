@@ -135,7 +135,7 @@ repo 內與 Rich Messages 直接相關的持續性文件是
 | --- | --- |
 | Telegram 6.9.4 Rich Messages | `feat/rich-messages-upstream-ed73b49` 已完成上游整合、AyuGram 衝突處理與兩輪修正，並由 `b303930a81b1` 整合進 `dev`。 |
 | anti-recall 資料庫升級 | 已修正升級時清空舊資料的問題；目前電腦的 `D:\TBuild\ayu-verify` 保留 v1 fixture 與檢查工具，但它不是 repo 或新環境的必要目錄。 |
-| Rich Messages 轉傳 fallback | 截斷後綴已改用 `ayu_ForwardTruncatedSuffix` 語言 key；rich-page 文字與 fallback 路徑位於 `Telegram/SourceFiles/ayu/features/forward`。 |
+| Rich Messages 轉傳 fallback | 截斷字尾已改用 `ayu_ForwardTruncatedSuffix` 語言 key；rich-page 文字與 fallback 路徑位於 `Telegram/SourceFiles/ayu/features/forward`。 |
 | IV/Markdown 預覽視窗 | `Iv::Markdown::Controller::createWindow()` 在 `show()` 後呼叫 `setNativeFrame(false)`，避免 Windows 原生標題列在 resize 前殘留。 |
 | AyuGram 設定正體中文 | `051471fb1bcc` 將翻譯分支整合到 `dev`，包含 AyuGram 設定與「實驗性設定」。 |
 | 中文顯示條件 | `19c981c3fd6b` 改為尊重應用程式目前使用的語言；中文 App 語言顯示正體中文，非中文 App 語言維持 AyuGram 原文。不可只依作業系統語言強制翻譯。 |
@@ -144,7 +144,7 @@ repo 內與 Rich Messages 直接相關的持續性文件是
 | 本機 Release 封裝 | `7edcd683950c` 整合本機發布程序；後續 `18ad92955e74` 與 `34b714897937` 修正封裝器輸出處理。 |
 | `v6.9.4-beta.7` | 已由 commit `34b714897937` 本機建置並發布；是一般 Release、不是 prerelease，而且是 Latest。 |
 | 埃及聖書體使用者名稱 | `Telegram/lib_ui` 的簽署提交 `3775d69f32b1` 為 Qt 6 加入 Egyptian Hieroglyphs script fallback；superproject 簽署提交 `d0181d6d545a` 已進入本機 `dev`，Debug 實測通過。 |
-| Message Shot 彈窗自適應 | 簽署提交 `ad71f1dcd2` 完成寬度鉗制、預覽等比縮小與視窗縮放跟隨；`baf29d21fe` 讓 App 版本文字顯示 beta 序號（`core/version.h` 的 `AppBetaVersionSerial`）。兩者已整合 `dev` 並推送，Debug 實測通過。 |
+| Message Shot 彈出視窗自動調整 | 簽署提交 `ad71f1dcd2` 完成寬度上限、預覽等比縮小與視窗縮放即時調整；`baf29d21fe` 讓 App 版本文字顯示 beta 序號（`core/version.h` 的 `AppBetaVersionSerial`）。兩者已整合 `dev` 並推送，Debug 實測通過。 |
 | 發布文件三層規範 | `CHANGELOG.md`（雙語詳細）、`README.md`／`README.zh-TW.md` 摘要區與 `AGENTS.md` 的 Release documentation 規範已建立；每次打 tag 前先完成文件更新。 |
 
 `v6.9.4-beta.7` 的 ZIP 僅包含：
@@ -159,7 +159,7 @@ modules/x64/d3d/d3dcompiler_47.dll
 Authenticode 憑證簽署，因此 SHA-256 與簽署 Git tag 是必要驗證資料。
 
 2026-07-14 本階段的接手狀態：`lib_ui` 提交 `3775d69f32b1` 與 superproject
-`dev` 均已推送。Message Shot 彈窗自適應與 beta 序號顯示（`ad71f1dcd2`、
+`dev` 均已推送。Message Shot 彈出視窗自動調整與 beta 序號顯示（`ad71f1dcd2`、
 `baf29d21fe`）已整合 `dev` 並推送，Debug 實測通過（SHA-256
 `474DB02AE0D174CE8727198000D93DFE276EB94B250B6895E99ECB1451888538`），
 使用者已確認並要求發布 `v6.9.4-beta.8`。
@@ -448,13 +448,13 @@ Release 由本機建置、封裝，再以 `gh release create` 上傳。
 
 ## 未來 TODO
 
-### 訊息截圖彈窗自適應
+### 訊息截圖彈出視窗自動調整
 
 狀態：已完成並整合 `dev`（簽署提交 `ad71f1dcd2`）。
 
-彈窗寬度以 `getDelegate()->outerContainer()` 寬度減
-`st::messageShotBoxOuterSkip` 為上限，並以 resize event filter 跟隨視窗
-縮放；`ImageView` 覆寫 `resizeGetHeight()` 讓預覽等比縮小、繪製走
+彈出視窗寬度以 `getDelegate()->outerContainer()` 寬度減
+`st::messageShotBoxOuterSkip` 為上限，並以 resize event filter 在視窗
+縮放時即時調整；`ImageView` 覆寫 `resizeGetHeight()` 讓預覽等比縮小、繪製走
 `PainterHighQualityEnabler`，`getImage()` 維持原始解析度。注意
 `setDimensionsToContent()` 不可重複呼叫（heightValue 訂閱會累積），動態
 寬度必須自行管理單一訂閱。尚未逐項驗證：125%/150%/200% 縮放、英文 UI、
@@ -470,7 +470,7 @@ Save 對話框、鍵盤走訪、多則與短訊息、主題選擇器互動。
 - `UseTelegramRichTranslation()` 與 `CreateTranslateProvider()` 對 Native
   provider 的最終 MTProto fallback 判斷需要共用同一個 resolver。
 - `Telegram/SourceFiles/ayu/data/messages_storage.cpp` 的 anti-recall 媒體 mapping
-  仍有 `todo`，媒體資料保存範圍需要單獨設計與測試。
+  仍有 `todo`，媒體資料保留範圍需要單獨設計與測試。
 - Message Shot 對 Rich Messages 的 Channel block 頭像預載仍需測試矩陣確認。
 - `cmake/external/zlib/CMakeLists.txt` 的 `ZLIB_WINAPI` 對未來 Win32/x86 建置
   仍需獨立驗證；目前發布目標只有 Windows x64。

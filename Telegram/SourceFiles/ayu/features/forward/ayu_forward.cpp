@@ -26,6 +26,12 @@
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/text/text_utilities.h"
 
+namespace {
+
+constexpr auto kRichMessageTruncatedSuffix = u" [message truncated]"_q;
+
+} // namespace
+
 namespace AyuForward {
 
 std::unordered_map<PeerId, std::shared_ptr<ForwardState>> forwardStates;
@@ -372,25 +378,35 @@ void forwardMessages(
 		}
 
 		auto message = Api::MessageToSend(action);
-		const auto richResult = AyuSync::sendRichMessageSync(
+		const auto outcome = AyuSync::sendRichMessageSync(
 			session,
 			item,
 			message.action,
 			draft.options);
-		if (richResult == AyuSync::RichSendResult::Succeeded) {
+		if (outcome.status == AyuSync::RichSendResult::Succeeded) {
 			state->sentMessages = i + 1;
 			state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
 			continue;
 		}
-		if (richResult == AyuSync::RichSendResult::Pending) {
+		if (outcome.status == AyuSync::RichSendResult::Pending) {
 			continue;
 		}
 		const auto richPlainFallback
-			= (richResult == AyuSync::RichSendResult::PlainFallback)
-			|| (richResult == AyuSync::RichSendResult::Failed);
+			= (outcome.status == AyuSync::RichSendResult::PlainFallback)
+			|| (outcome.status == AyuSync::RichSendResult::Failed)
+			|| (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated);
 		message.action.options.invertCaption = item->invertMedia();
 
-		auto extractedText = extractText(item);
+		auto extractedText = outcome.flattenedFullText
+			? TextWithTags{
+				outcome.flattenedFullText->text,
+				TextUtilities::ConvertEntitiesToTextTags(
+					outcome.flattenedFullText->entities),
+			}
+			: extractText(item);
+		if (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated) {
+			extractedText.text += kRichMessageTruncatedSuffix;
+		}
 		if (extractedText.empty() && !mediaDownloadable(item->media())) {
 			continue;
 		}

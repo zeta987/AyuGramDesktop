@@ -114,7 +114,7 @@ struct ModerateOptions final {
 }
 
 [[nodiscard]] bool SuggestSelfDeleteAllReport(not_null<HistoryItem*> item) {
-	if (!item->out() || item->isPost()) {
+	if (!item->out() || item->isPost() || item->isDeleted()) {
 		return false;
 	}
 	const auto channel = item->history()->peer->asChannel();

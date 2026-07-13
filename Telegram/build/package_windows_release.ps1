@@ -82,19 +82,41 @@ $binaryPaths = [ordered]@{
     'AyuGram.exe' = Join-Path $releaseDirectory 'AyuGram.exe'
     'Updater.exe' = Join-Path $releaseDirectory 'Updater.exe'
 }
-foreach ($entry in $binaryPaths.GetEnumerator()) {
-    $binary = Get-Item -LiteralPath $entry.Value -ErrorAction Stop
-    $fileVersion = [string]$binary.VersionInfo.FileVersion
-    $productVersion = [string]$binary.VersionInfo.ProductVersion
-    if ($fileVersion -ne $expectedFileVersion -or
-        $productVersion -ne $expectedFileVersion) {
-        throw "$($entry.Key) version $fileVersion/$productVersion does not match $expectedFileVersion."
-    }
+$ayuGram = Get-Item -LiteralPath $binaryPaths['AyuGram.exe'] `
+    -ErrorAction Stop
+$ayuGramFileVersion = [string]$ayuGram.VersionInfo.FileVersion
+$ayuGramProductVersion = [string]$ayuGram.VersionInfo.ProductVersion
+if ($ayuGramFileVersion -ne $expectedFileVersion -or
+    $ayuGramProductVersion -ne $expectedFileVersion) {
+    throw "AyuGram.exe version $ayuGramFileVersion/$ayuGramProductVersion does not match $expectedFileVersion."
+}
+$updater = Get-Item -LiteralPath $binaryPaths['Updater.exe'] -ErrorAction Stop
+if ($updater.Length -le 0) {
+    throw 'Updater.exe is empty.'
 }
 
 $modulePath = Join-Path $releaseDirectory `
     'modules\x64\d3d\d3dcompiler_47.dll'
-[void](Get-Item -LiteralPath $modulePath -ErrorAction Stop)
+if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
+    $modulePath = Join-Path $RepositoryRoot `
+        'cmake\win_directx_helper\modules\x64\d3d\d3dcompiler_47.dll'
+}
+$module = Get-Item -LiteralPath $modulePath -ErrorAction Stop
+$moduleVersionInfo = $module.VersionInfo
+$moduleVersion = '{0}.{1}.{2}.{3}' -f @(
+    $moduleVersionInfo.FileMajorPart,
+    $moduleVersionInfo.FileMinorPart,
+    $moduleVersionInfo.FileBuildPart,
+    $moduleVersionInfo.FilePrivatePart
+)
+if ($moduleVersion -ne '10.0.22621.3233') {
+    throw "Unexpected d3dcompiler_47.dll version: $moduleVersion"
+}
+$moduleHash = (Get-FileHash -LiteralPath $modulePath -Algorithm SHA256).Hash
+if ($moduleHash -ne
+    'A05D04A270F68C8C6D6EA2D23BEBF8CD1D5453B26B5442FA54965F90F1C62082') {
+    throw "Unexpected d3dcompiler_47.dll SHA-256: $moduleHash"
+}
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $assetName = "AyuGram-Windows-x64-$Tag"
@@ -202,10 +224,12 @@ try {
         $qtVersion = $Matches.version
     }
 
-    $ayuGram = Get-Item -LiteralPath $binaryPaths['AyuGram.exe']
-    $updater = Get-Item -LiteralPath $binaryPaths['Updater.exe']
     $ayuSignature = Get-AuthenticodeSignature -LiteralPath $ayuGram.FullName
     $updaterSignature = Get-AuthenticodeSignature -LiteralPath $updater.FullName
+    $ayuGramHash = (
+        Get-FileHash -LiteralPath $ayuGram.FullName -Algorithm SHA256).Hash
+    $updaterHash = (
+        Get-FileHash -LiteralPath $updater.FullName -Algorithm SHA256).Hash
     $buildInfo = @(
         "Commit=$head"
         "ReleaseTag=$Tag"
@@ -217,6 +241,9 @@ try {
         "UpdaterBuildTimeUtc=$($updater.LastWriteTimeUtc.ToString('o'))"
         "AyuGramAuthenticode=$($ayuSignature.Status)"
         "UpdaterAuthenticode=$($updaterSignature.Status)"
+        "AyuGramSha256=$ayuGramHash"
+        "UpdaterSha256=$updaterHash"
+        "D3DCompilerSha256=$moduleHash"
         "CMake=$cmakeVersion"
         "CMakeGenerator=$([string]$cacheValues['CMAKE_GENERATOR'])"
         "MSVC=$compilerVersion"

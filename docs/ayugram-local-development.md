@@ -127,7 +127,11 @@ repo 內與 Rich Messages 直接相關的持續性文件是
 - `feat/ayu-settings-zh-tw` 保留 AyuGram 設定與實驗性設定翻譯的可重用歷史。
 - `fix/egyptian-hieroglyph-fallback` 保留 Qt 6 字型 fallback 修正；該修正已
   fast-forward 到 `dev`。
-- 未經使用者明確指示，不刪除上述保留分支。
+- `fix/message-shot-responsive-box` 保留訊息截圖彈出視窗自動調整與 beta
+  序號顯示的修正歷史；該修正已 fast-forward 到 `dev` 並隨 `v6.9.4-beta.8`
+  發布。
+- 上述保留分支均已推送到 `origin` 作為備份。未經使用者明確指示，不刪除
+  這些保留分支。
 
 ## 已完成工作
 

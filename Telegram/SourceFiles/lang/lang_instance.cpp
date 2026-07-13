@@ -25,6 +25,34 @@ constexpr auto kCloudLangPackName = "tdesktop"_cs;
 constexpr auto kCustomLanguage = "#custom"_cs;
 constexpr auto kLangValuesLimit = 20000;
 
+bool IsChineseCustomLanguagePath(const QString &path) {
+	auto name = QFileInfo(path).completeBaseName().toLower();
+	if (name.contains(u"中文"_q)
+		|| name.contains(u"繁體"_q)
+		|| name.contains(u"繁体"_q)
+		|| name.contains(u"簡體"_q)
+		|| name.contains(u"简体"_q)) {
+		return true;
+	}
+	for (auto i = 0; i != name.size(); ++i) {
+		if (!name[i].isLetterOrNumber()) {
+			name[i] = u'-';
+		}
+	}
+	const auto parts = name.split(u'-', Qt::SkipEmptyParts);
+	return ranges::any_of(parts, [](const QString &part) {
+		return (part == u"zh"_q)
+			|| (part == u"zhcn"_q)
+			|| (part == u"zhtw"_q)
+			|| (part == u"zhhk"_q)
+			|| (part == u"zhmo"_q)
+			|| (part == u"zhsg"_q)
+			|| (part == u"zhhans"_q)
+			|| (part == u"zhhant"_q)
+			|| (part == u"chinese"_q);
+	});
+}
+
 std::vector<QString> PrepareDefaultValues() {
 	auto result = std::vector<QString>();
 	result.reserve(kKeysCount);
@@ -222,6 +250,23 @@ QString CustomLanguageId() {
 	return kCustomLanguage.utf16();
 }
 
+bool IsChineseLanguageId(const QString &id) {
+	auto normalized = id.trimmed().toLower();
+	normalized.replace(u'_', u'-');
+	while (normalized.startsWith(u'#') || normalized.startsWith(u'-')) {
+		normalized.remove(0, 1);
+	}
+	return (normalized == u"zh"_q)
+		|| normalized.startsWith(u"zh-"_q)
+		|| (normalized == u"zhcn"_q)
+		|| (normalized == u"zhtw"_q)
+		|| (normalized == u"zhhk"_q)
+		|| (normalized == u"zhmo"_q)
+		|| (normalized == u"zhsg"_q)
+		|| (normalized == u"zhhans"_q)
+		|| (normalized == u"zhhant"_q);
+}
+
 Language DefaultLanguage() {
 	return Language{
 		u"en"_q,
@@ -360,6 +405,21 @@ bool Instance::isCustom() const {
 	return (_id == CustomLanguageId())
 		|| (_id == u"#TEST_X"_q)
 		|| (_id == u"#TEST_0"_q);
+}
+
+bool Instance::isChineseLanguagePack() const {
+	const auto customPath = !_customFilePathAbsolute.isEmpty()
+		? _customFilePathAbsolute
+		: _customFilePathRelative;
+	return IsChineseLanguageId(_id)
+		|| IsChineseLanguageId(_pluralId)
+		|| (isCustom() && IsChineseCustomLanguagePath(customPath))
+		|| (_base && _base->isChineseLanguagePack());
+}
+
+bool Instance::isChineseContext() const {
+	return IsChineseLanguageId(systemLangCode())
+		|| isChineseLanguagePack();
 }
 
 int Instance::version(Pack pack) const {
@@ -755,6 +815,14 @@ void Instance::updatePluralRules() {
 			: LanguageIdOrDefault(_id);
 	}
 	UpdatePluralRules(_pluralId);
+}
+
+void Instance::notifyUpdated() {
+	if (!_derived) {
+		_updated.fire({});
+	} else {
+		_derived->_updated.fire({});
+	}
 }
 
 void Instance::resetValue(const QByteArray &key) {

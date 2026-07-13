@@ -16,6 +16,7 @@
 #include "core/application.h"
 #include "data/data_user.h"
 #include "main/main_account.h"
+#include "lang/lang_instance.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "settings/settings_builder.h"
@@ -271,7 +272,8 @@ QString GetAccountName(uint64 userId) {
 			return account->session().user()->name();
 		}
 	}
-	return u"未知"_q;
+	return Lang::GetInstance().isChineseContext()
+		? u"未知"_q : u"Unknown"_q;
 }
 
 QString PickerLabel(uint64 userId) {

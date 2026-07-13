@@ -10,6 +10,7 @@
 #include "data/data_peer.h"
 #include "data/data_peer_id.h"
 #include "data/data_session.h"
+#include "lang/lang_instance.h"
 #include "main/main_session.h"
 #include "styles/style_ayu_icons.h"
 #include "styles/style_dialogs.h"
@@ -74,7 +75,11 @@ void AvatarCornersPreview::paintEvent(QPaintEvent *e) {
 
 	p.setPen(st::dialogsTextFg);
 	p.setFont(st::dialogsTextFont);
-	p.drawText(row.textLeft + xShift, row.textTop + st::dialogsTextFont->ascent, u"遲到總比不到好"_q);
+	p.drawText(
+		row.textLeft + xShift,
+		row.textTop + st::dialogsTextFont->ascent,
+		Lang::GetInstance().isChineseContext()
+			? u"遲到總比不到好"_q : u"Better late than never"_q);
 }
 
 void AvatarCornersPreview::mousePressEvent(QMouseEvent *e) {

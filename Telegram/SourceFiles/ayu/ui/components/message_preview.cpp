@@ -15,6 +15,7 @@
 #include "history/history_item_edition.h"
 #include "history/admin_log/history_admin_log_item.h"
 #include "history/view/history_view_element.h"
+#include "lang/lang_instance.h"
 #include "history/view/history_view_fake_items.h"
 #include "main/main_session.h"
 #include "styles/style_chat.h"
@@ -66,12 +67,18 @@ MessagePreview::MessagePreview(
 	const auto history = controller->session().data().history(
 		PeerData::kServiceNotificationsId);
 
+	const auto taiwanChinese = Lang::GetInstance().isChineseContext();
+	const auto updateText = taiwanChinese
+		? u"什麼時候更新？"_q : u"Update wehn?"_q;
+	const auto grassText = taiwanChinese
+		? u"該出門走走、摸摸真實的草了……"_q
+		: u"You need to go outside and touch some grass..."_q;
 	_state->reply = HistoryView::GenerateItem(
 		_state->delegate.get(),
 		history,
 		history->session().userPeerId(),
 		FullMsgId(),
-		u"什麼時候更新？"_q);
+		updateText);
 
 	const auto ayugramUser = HistoryView::GenerateUser(
 		history,
@@ -86,7 +93,7 @@ MessagePreview::MessagePreview(
 			.messageId = _state->reply->data()->fullId(),
 		},
 		.date = base::unixtime::now() - 3600,
-	}, TextWithEntities{ u"該出門走走、摸摸真實的草了……"_q },
+	}, TextWithEntities{ grassText },
 	MTP_messageMediaEmpty());
 
 	messageItem->setDeleted();
@@ -99,7 +106,7 @@ MessagePreview::MessagePreview(
 	auto edition = HistoryMessageEdition();
 	edition.editDate = base::unixtime::now();
 	edition.textWithEntities = TextWithEntities{
-		u"該出門走走、摸摸真實的草了……"_q,
+		grassText,
 	};
 	edition.useSameViews = true;
 	edition.useSameForwards = true;

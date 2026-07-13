@@ -9,6 +9,7 @@
 #include "qjsondocument.h"
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "lang/lang_file_parser.h"
 #include "lang/lang_instance.h"
 #include "storage/localstorage.h"
 
@@ -33,17 +34,112 @@ constexpr auto postfixes = {
 	"other"
 };
 
+constexpr auto kBundledTaiwanChinese
+	= ":/gui/langs/ayu_zh_tw.strings"_cs;
+
+[[nodiscard]] bool ForEachBundledTaiwanChinese(
+		Fn<void(QLatin1String key, const QByteArray &value)> callback) {
+	QFile file(kBundledTaiwanChinese.utf16());
+	if (!file.open(QIODevice::ReadOnly)) {
+		LOG(("Could not open bundled AyuGram zh-TW language."));
+		return false;
+	}
+	Lang::FileParser parser(file.readAll(), std::move(callback));
+	if (!parser.errors().isEmpty()) {
+		LOG(("Could not parse bundled AyuGram zh-TW language: %1"
+			).arg(parser.errors()));
+		return false;
+	}
+	if (!parser.warnings().isEmpty()) {
+		LOG(("Bundled AyuGram zh-TW language warnings: %1"
+			).arg(parser.warnings()));
+	}
+	return true;
+}
+
 AyuLanguage *AyuLanguage::instance = nullptr;
 
-AyuLanguage::AyuLanguage() = default;
+AyuLanguage::AyuLanguage() {
+	Lang::GetInstance().idChanges(
+	) | rpl::on_next([=] {
+		refresh();
+	}, _lifetime);
+	Lang::GetInstance().updated(
+	) | rpl::on_next([this] {
+		const auto &language = Lang::GetInstance();
+		if (!_applyingBundledTaiwanChinese && language.isChineseContext()) {
+			applyBundledTaiwanChinese();
+		}
+	}, _lifetime);
+}
 
 void AyuLanguage::init() {
 	if (!instance) instance = new AyuLanguage;
-	instance->loadCachedLanguage();
+	instance->refresh();
 }
 
 AyuLanguage *AyuLanguage::currentInstance() {
 	return instance;
+}
+
+void AyuLanguage::refresh() {
+	if (_chkReply) {
+		QObject::disconnect(_chkReply, nullptr, this, nullptr);
+		_chkReply->abort();
+		_chkReply->deleteLater();
+		_chkReply = nullptr;
+	}
+	needFallback = false;
+	_currentLangId = QString();
+
+	const auto &language = Lang::GetInstance();
+	if (language.isChineseContext()) {
+		applyBundledTaiwanChinese();
+		return;
+	}
+
+	resetBundledTaiwanChinese();
+	loadCachedLanguage();
+	if (!language.id().isEmpty() && !language.isCustom()) {
+		fetchLanguage(language.id(), language.baseId());
+	}
+}
+
+void AyuLanguage::applyBundledTaiwanChinese() {
+	if (_applyingBundledTaiwanChinese) {
+		return;
+	}
+	_applyingBundledTaiwanChinese = true;
+	const auto guard = gsl::finally([&] {
+		_applyingBundledTaiwanChinese = false;
+	});
+	auto applied = false;
+	const auto parsed = ForEachBundledTaiwanChinese(
+			[&](QLatin1String key, const QByteArray &value) {
+			const auto bytes = QByteArray(key.data(), key.size());
+			Lang::GetInstance().resetValue(bytes);
+			Lang::GetInstance().applyValue(bytes, value);
+			applied = true;
+		});
+	_bundledTaiwanChineseApplied = parsed && applied;
+	Lang::GetInstance().updatePluralRules();
+	Lang::GetInstance().notifyUpdated();
+}
+
+void AyuLanguage::resetBundledTaiwanChinese() {
+	if (!_bundledTaiwanChineseApplied) {
+		return;
+	}
+	if (!ForEachBundledTaiwanChinese(
+			[](QLatin1String key, const QByteArray &) {
+			Lang::GetInstance().resetValue(
+				QByteArray(key.data(), key.size()));
+		})) {
+		return;
+	}
+	_bundledTaiwanChineseApplied = false;
+	Lang::GetInstance().updatePluralRules();
+	Lang::GetInstance().notifyUpdated();
 }
 
 QString AyuLanguage::getCacheDir() const {
@@ -125,54 +221,46 @@ void AyuLanguage::fetchLanguage(const QString &id, const QString &baseId) {
 			needFallback ? baseId : finalLangPackId));
 	}
 	_chkReply = networkManager.get(QNetworkRequest(url));
-	connect(_chkReply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(fetchError(QNetworkReply::NetworkError)));
-	connect(_chkReply, SIGNAL(finished()), this, SLOT(fetchFinished()));
+	connect(_chkReply, &QNetworkReply::errorOccurred,
+		this, &AyuLanguage::fetchError);
+	connect(_chkReply, &QNetworkReply::finished,
+		this, &AyuLanguage::fetchFinished);
 }
 
 void AyuLanguage::fetchFinished() {
 	if (!_chkReply) return;
+	const auto reply = base::take(_chkReply);
+	const auto cleanup = gsl::finally([reply] {
+		reply->deleteLater();
+	});
 
 	QString langPackBaseId = Lang::GetInstance().baseId();
 	QString langPackId = Lang::GetInstance().id();
-	auto statusCode = _chkReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+	auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
 	if (statusCode == 404 && !langPackId.isEmpty() && !langPackBaseId.isEmpty() && !needFallback) {
 		LOG(("AyuGram Language not found! Fallback to main language: %1...").arg(langPackBaseId));
 		needFallback = true;
-		_chkReply->disconnect();
 		fetchLanguage("", langPackBaseId);
-	} else {
-		const auto result = _chkReply->readAll().trimmed();
-		QJsonParseError error{};
-		const auto doc = QJsonDocument::fromJson(result, &error);
-		if (error.error == QJsonParseError::NoError) {
-			saveCachedLanguage(result, _currentLangId);
-			applyLanguageJson(doc);
-		} else {
-			LOG(("Incorrect language JSON File."));
-		}
+		return;
+	}
+	if (reply->error() != QNetworkReply::NoError) {
+		return;
+	}
 
-		_chkReply = nullptr;
+	const auto result = reply->readAll().trimmed();
+	QJsonParseError error{};
+	const auto doc = QJsonDocument::fromJson(result, &error);
+	if (error.error == QJsonParseError::NoError) {
+		saveCachedLanguage(result, _currentLangId);
+		applyLanguageJson(doc);
+	} else {
+		LOG(("Incorrect language JSON File."));
 	}
 }
 
 void AyuLanguage::fetchError(QNetworkReply::NetworkError e) {
 	LOG(("Network error: %1").arg(e));
-
-	if (e == QNetworkReply::NetworkError::ContentNotFoundError) {
-		const auto baseId = Lang::GetInstance().baseId();
-		const auto id = Lang::GetInstance().id();
-
-		if (!id.isEmpty() && !baseId.isEmpty() && !needFallback) {
-			LOG(("AyuGram Language not found! Fallback to main language: %1...").arg(baseId));
-			needFallback = true;
-			_chkReply->disconnect();
-			fetchLanguage("", baseId);
-		} else {
-			LOG(("AyuGram Language not found!"));
-			_chkReply = nullptr;
-		}
-	}
 }
 
 void AyuLanguage::applyLanguageJson(QJsonDocument doc) {
@@ -210,4 +298,5 @@ void AyuLanguage::applyLanguageJson(QJsonDocument doc) {
 		Lang::GetInstance().applyValue(key.toUtf8(), val.toUtf8());
 	}
 	Lang::GetInstance().updatePluralRules();
+	Lang::GetInstance().notifyUpdated();
 }

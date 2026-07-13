@@ -26,12 +26,6 @@
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/text/text_utilities.h"
 
-namespace {
-
-constexpr auto kRichMessageTruncatedSuffix = u" [message truncated]"_q;
-
-} // namespace
-
 namespace AyuForward {
 
 std::unordered_map<PeerId, std::shared_ptr<ForwardState>> forwardStates;
@@ -404,8 +398,9 @@ void forwardMessages(
 					outcome.flattenedFullText->entities),
 			}
 			: extractText(item);
-		if (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated) {
-			extractedText.text += kRichMessageTruncatedSuffix;
+		if (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated
+			&& !extractedText.text.isEmpty()) {
+			extractedText.text += u" [message truncated]"_q;
 		}
 		if (extractedText.empty() && !mediaDownloadable(item->media())) {
 			continue;

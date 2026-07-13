@@ -23,6 +23,7 @@
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "iv/iv_rich_page.h"
 #include "lang/lang_text_entity.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -638,7 +639,10 @@ int typeOfMessage(const HistoryItem *item) {
 }
 
 QString extractSingle(const not_null<HistoryItem*> item) {
-	const auto original = item->originalText();
+	const auto page = item->richPage();
+	const auto original = page
+		? Iv::FlattenRichPageSummary(page)
+		: item->originalText();
 	QString text(original.text);
 	if (!original.entities.empty()) {
 		for (const auto &entity : original.entities) {

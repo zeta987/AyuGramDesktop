@@ -371,16 +371,43 @@ void forwardMessages(
 			return;
 		}
 
-		auto extractedText = extractText(item);
+		auto message = Api::MessageToSend(action);
+		const auto outcome = AyuSync::sendRichMessageSync(
+			session,
+			item,
+			message.action,
+			draft.options);
+		if (outcome.status == AyuSync::RichSendResult::Succeeded) {
+			state->sentMessages = i + 1;
+			state->updateBottomBar(*session, &peer->id, ForwardState::State::Sending);
+			continue;
+		}
+		if (outcome.status == AyuSync::RichSendResult::Pending) {
+			continue;
+		}
+		const auto richPlainFallback
+			= (outcome.status == AyuSync::RichSendResult::PlainFallback)
+			|| (outcome.status == AyuSync::RichSendResult::Failed)
+			|| (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated);
+		message.action.options.invertCaption = item->invertMedia();
+
+		auto extractedText = outcome.flattenedFullText
+			? TextWithTags{
+				outcome.flattenedFullText->text,
+				TextUtilities::ConvertEntitiesToTextTags(
+					outcome.flattenedFullText->entities),
+			}
+			: extractText(item);
+		if (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated
+			&& !extractedText.text.isEmpty()) {
+			extractedText.text += tr::ayu_ForwardTruncatedSuffix(tr::now);
+		}
 		if (extractedText.empty() && !mediaDownloadable(item->media())) {
 			continue;
 		}
 
-		auto message = Api::MessageToSend(Api::SendAction(session->data().history(peer->id)));
-		message.action.options.invertCaption = item->invertMedia();
-		message.action.replyTo = action.replyTo;
-
-		if (draft.options != Data::ForwardOptions::NoNamesAndCaptions) {
+		if (draft.options != Data::ForwardOptions::NoNamesAndCaptions
+			|| richPlainFallback) {
 			message.textWithTags = extractedText;
 		}
 

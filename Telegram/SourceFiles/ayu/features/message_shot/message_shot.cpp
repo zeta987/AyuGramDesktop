@@ -9,7 +9,9 @@
 #include "qguiapplication.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/ui/boxes/message_shot_box.h"
+#include "ayu/utils/rich_message_media.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/flat_set.h"
 #include "boxes/abstract_box.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
@@ -203,6 +205,87 @@ QColor makeDefaultBackgroundColor() {
 	return st::boxBg->c.darker(110);
 }
 
+namespace {
+
+struct MediaPreload {
+	std::vector<std::shared_ptr<Data::PhotoMedia>> photos;
+	std::vector<std::shared_ptr<Data::DocumentMedia>> documents;
+	base::flat_set<not_null<PhotoData*>> photoOwners;
+	base::flat_set<not_null<DocumentData*>> documentOwners;
+};
+
+void PreloadPhoto(
+		MediaPreload *preload,
+		PhotoData *photo,
+		Data::FileOrigin origin) {
+	if (!photo || !preload->photoOwners.emplace(photo).second) {
+		return;
+	}
+	auto media = photo->createMediaView();
+	if (!media->loaded()) {
+		media->wanted(Data::PhotoSize::Large, origin);
+	}
+	preload->photos.push_back(std::move(media));
+}
+
+void PreloadDocument(
+		MediaPreload *preload,
+		DocumentData *document,
+		Data::FileOrigin origin) {
+	if (!document) {
+		return;
+	}
+	PreloadPhoto(preload, document->goodThumbnailPhoto(), origin);
+	if (!document->hasThumbnail()
+		|| !preload->documentOwners.emplace(document).second) {
+		return;
+	}
+	auto media = document->createMediaView();
+	if (!media->thumbnail()) {
+		media->thumbnailWanted(origin);
+	}
+	preload->documents.push_back(std::move(media));
+}
+
+void PreloadMessageMedia(
+		MediaPreload *preload,
+		not_null<HistoryItem*> message) {
+	const auto origin = Data::FileOrigin(message->fullId());
+	if (const auto media = message->media()) {
+		if (const auto photo = media->photo()) {
+			PreloadPhoto(preload, photo, origin);
+		} else if (const auto document = media->document()) {
+			PreloadDocument(preload, document, origin);
+		}
+	}
+	const auto rich = AyuUtils::CollectRichMessageVisualMedia(message);
+	for (const auto photo : rich.photos) {
+		PreloadPhoto(preload, photo, origin);
+	}
+	for (const auto document : rich.documents) {
+		PreloadDocument(preload, document, origin);
+	}
+	for (const auto document : rich.thumbnailOnlyDocuments) {
+		PreloadDocument(preload, document, origin);
+	}
+}
+
+[[nodiscard]] bool MediaPreloadReady(const MediaPreload &preload) {
+	for (const auto &media : preload.photos) {
+		if (media->owner()->loading()) {
+			return false;
+		}
+	}
+	for (const auto &media : preload.documents) {
+		if (media->owner()->thumbnailLoading()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
 void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage&,bool)>& callback) {
 	const auto controller = config.controller;
 	const auto st = config.st;
@@ -272,34 +355,10 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 		getView(messages[0])->setAttachToNext(false);
 	}
 
-	struct MediaPreload {
-		std::vector<std::shared_ptr<Data::PhotoMedia>> photos;
-		std::vector<std::shared_ptr<Data::DocumentMedia>> documents;
-	};
 	auto preload = std::make_shared<MediaPreload>();
 
 	for (const auto &message : messages) {
-		if (!message->media()) continue;
-		const auto origin = Data::FileOrigin(message->fullId());
-		if (const auto photo = message->media()->photo()) {
-			auto media = photo->activeMediaView()
-				? photo->activeMediaView()
-				: photo->createMediaView();
-			if (!media->loaded()) {
-				photo->load(origin, LoadFromCloudOrLocal, false);
-			}
-			preload->photos.push_back(std::move(media));
-		} else if (const auto document = message->media()->document()) {
-			if (document->hasThumbnail()) {
-				auto media = document->activeMediaView()
-					? document->activeMediaView()
-					: document->createMediaView();
-				if (!media->thumbnail()) {
-					document->loadThumbnail(origin);
-				}
-				preload->documents.push_back(std::move(media));
-			}
-		}
+		PreloadMessageMedia(preload.get(), message);
 	}
 
 	const auto showBackground = AyuSettings::getInstance().messageShotSettings().showBackground();
@@ -415,13 +474,7 @@ void Make(not_null<QWidget*> box, const ShotConfig &config, const Fn<void(QImage
 			config.controller->session().downloaderTaskFinished()
 		) | rpl::filter([=]
 			{
-				for (const auto &media : preload->photos) {
-					if (media->owner()->loading()) return false;
-				}
-				for (const auto &media : preload->documents) {
-					if (media->owner()->thumbnailLoading()) return false;
-				}
-				return true;
+				return MediaPreloadReady(*preload);
 			}
 		) | rpl::take(1) | rpl::on_next([=]
 		{

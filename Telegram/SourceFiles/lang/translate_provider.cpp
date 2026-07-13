@@ -80,8 +80,12 @@ TranslateProviderRequest PrepareTranslateProviderRequest(
 		return result;
 	}
 	if (result.msgId) {
-		if (const auto i = peer->owner().message(peer, MsgId(result.msgId))) {
-			result.text = i->originalText();
+		if (result.text.empty()) {
+			if (const auto i = peer->owner().message(
+					peer,
+					MsgId(result.msgId))) {
+				result.text = i->originalText();
+			}
 		}
 		result.msgId = 0;
 	}

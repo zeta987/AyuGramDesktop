@@ -438,11 +438,7 @@ void PeerData::paintUserpic(
 	const auto cloud = userpicCloudImage(view);
 	const auto ratio = style::DevicePixelRatio();
 	if (context.shape == Ui::PeerUserpicShape::Auto) {
-		context.shape = (isForum() && !isBot())
-			? Ui::PeerUserpicShape::Forum
-			: isMonoforum()
-			? Ui::PeerUserpicShape::Monoforum
-			: Ui::PeerUserpicShape::Circle;
+		context.shape = userpicShape();
 	}
 	Ui::ValidateUserpicCache(
 		view,
@@ -479,6 +475,9 @@ bool PeerData::useEmptyUserpic(Ui::PeerUserpicView &view) const {
 }
 
 InMemoryKey PeerData::userpicUniqueKey(Ui::PeerUserpicView &view) const {
+	if (const auto broadcast = monoforumBroadcast()) {
+		return broadcast->userpicUniqueKey(view);
+	}
 	return useEmptyUserpic(view)
 		? ensureEmptyUserpic()->uniqueKey()
 		: inMemoryKey(_userpic.location());
@@ -678,7 +677,7 @@ bool PeerData::canPinMessages() const {
 	Unexpected("Peer type in PeerData::canPinMessages.");
 }
 
-bool PeerData::canCreatePolls() const {
+bool PeerData::canCreatePolls(bool forbidInForums) const {
 	if (const auto user = asUser()) {
 		return user->isSelf()
 			|| (user->isBot()
@@ -688,15 +687,16 @@ bool PeerData::canCreatePolls() const {
 	} else if (isMonoforum()) {
 		return false;
 	}
-	return Data::CanSend(this, ChatRestriction::SendPolls);
+	return Data::CanSend(this, ChatRestriction::SendPolls, forbidInForums);
 }
 
-bool PeerData::canCreateTodoLists() const {
+bool PeerData::canCreateTodoLists(bool forbidInForums) const {
 	if (isMonoforum() || isBroadcast()) {
 		return false;
 	}
 	return session().premium()
-		&& (Data::CanSend(this, ChatRestriction::SendPolls) || isUser());
+		&& (Data::CanSend(this, ChatRestriction::SendPolls, forbidInForums)
+			|| isUser());
 }
 
 bool PeerData::canCreateTopics() const {
@@ -1277,7 +1277,10 @@ not_null<const PeerData*> PeerData::userpicPaintingPeer() const {
 }
 
 Ui::PeerUserpicShape PeerData::userpicShape() const {
-	return isForum() && !isBot()
+	const auto channel = asChannel();
+	return (isForum() && !isBot())
+		? Ui::PeerUserpicShape::Forum
+		: (channel && channel->isCommunity())
 		? Ui::PeerUserpicShape::Forum
 		: isMonoforum()
 		? Ui::PeerUserpicShape::Monoforum
@@ -1680,6 +1683,23 @@ bool PeerData::useSubsectionTabs() const {
 		return channel->useSubsectionTabs();
 	}
 	return false;
+}
+
+bool PeerData::displayAsForum() const {
+	if (!isForum()) {
+		return false;
+	} else if (Data::IsBotCreatesTopics(this)) {
+		const auto forum = asBot()->botInfo->forum();
+		return forum && !forum->topicsList()->empty();
+	}
+	return true;
+}
+
+bool PeerData::displaySubsectionTabs() const {
+	if (asBot()) {
+		return displayAsForum();
+	}
+	return useSubsectionTabs();
 }
 
 bool PeerData::viewForumAsMessages() const {
@@ -2229,6 +2249,13 @@ std::optional<uint8> ColorIndexFromColor(const MTPPeerColor *color) {
 bool IsBotUserCreatesTopics(not_null<PeerData*> peer) {
 	if (const auto user = peer->asUser()) {
 		return user->botInfo && user->botInfo->userCreatesTopics;
+	}
+	return false;
+}
+
+bool IsBotCreatesTopics(not_null<const PeerData*> peer) {
+	if (const auto user = peer->asUser()) {
+		return user->botInfo && !user->botInfo->userCreatesTopics;
 	}
 	return false;
 }

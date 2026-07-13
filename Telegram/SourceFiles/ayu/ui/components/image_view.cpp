@@ -12,8 +12,42 @@
 #include "styles/style_chat.h"
 #include "ui/painter.h"
 
+namespace {
+
+[[nodiscard]] QSize CountShownSize(QSize natural, int innerWidth) {
+	if (natural.isEmpty() || innerWidth <= 0) {
+		return QSize();
+	} else if (natural.width() <= innerWidth) {
+		return natural;
+	}
+	return QSize(
+		innerWidth,
+		std::max(natural.height() * innerWidth / natural.width(), 1));
+}
+
+[[nodiscard]] QRect CountShownRect(QRect inner, const QImage &source) {
+	const auto shown = CountShownSize(
+		source.size() / style::DevicePixelRatio(),
+		inner.width());
+	return QRect(
+		inner.x() + (inner.width() - shown.width()) / 2,
+		inner.y() + (inner.height() - shown.height()) / 2,
+		shown.width(),
+		shown.height());
+}
+
+} // namespace
+
 ImageView::ImageView(QWidget *parent)
 	: RpWidget(parent) {
+}
+
+int ImageView::resizeGetHeight(int newWidth) {
+	const auto &padding = st::imageViewInnerPadding;
+	const auto shown = CountShownSize(
+		image.size() / style::DevicePixelRatio(),
+		newWidth - padding.left() - padding.right());
+	return shown.height() + padding.top() + padding.bottom();
 }
 
 void ImageView::setImage(const QImage &image) {
@@ -36,8 +70,9 @@ void ImageView::setImage(const QImage &image) {
 			this->newDiffImage = QImage();
 		}
 
-		const auto size = image.size() / style::DevicePixelRatio();
-		setMinimumSize(size.grownBy(st::imageViewInnerPadding));
+		if (width() > 0) {
+			resizeToWidth(width());
+		}
 
 		if (this->animation.animating()) {
 			this->animation.stop();
@@ -113,14 +148,12 @@ void ImageView::paintEvent(QPaintEvent *e) {
 
 	p.fillPath(path, brush);
 
-	if (!baseImage.isNull()) {
-		const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
+	PainterHighQualityEnabler hq(p);
 
-		const auto resizedRect = QRect(
-			(realRect.width() - image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-			(realRect.height() - image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-			image.width() / style::DevicePixelRatio(),
-			image.height() / style::DevicePixelRatio());
+	const auto inner = rect().marginsRemoved(st::imageViewInnerPadding);
+
+	if (!baseImage.isNull()) {
+		const auto resizedRect = CountShownRect(inner, image);
 
 		p.drawImage(resizedRect, baseImage);
 
@@ -139,32 +172,16 @@ void ImageView::paintEvent(QPaintEvent *e) {
 		}
 	} else {
 		if (!prevImage.isNull()) {
-			const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
-
-			const auto resizedRect = QRect(
-				(realRect.width() - prevImage.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-				(realRect.height() - prevImage.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-				prevImage.width() / style::DevicePixelRatio(),
-				prevImage.height() / style::DevicePixelRatio());
-
 			const auto opacity = 1.0 - animation.value(1.0);
 			p.setOpacity(opacity);
-			p.drawImage(resizedRect, prevImage);
+			p.drawImage(CountShownRect(inner, prevImage), prevImage);
 			p.setOpacity(1.0);
 		}
 
 		if (!image.isNull()) {
-			const auto realRect = rect().marginsRemoved(st::imageViewInnerPadding);
-
-			const auto resizedRect = QRect(
-				(realRect.width() - image.width() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.left(),
-				(realRect.height() - image.height() / style::DevicePixelRatio()) / 2 + st::imageViewInnerPadding.top(),
-				image.width() / style::DevicePixelRatio(),
-				image.height() / style::DevicePixelRatio());
-
 			const auto opacity = animation.value(1.0);
 			p.setOpacity(opacity);
-			p.drawImage(resizedRect, image);
+			p.drawImage(CountShownRect(inner, image), image);
 			p.setOpacity(1.0);
 		}
 	}

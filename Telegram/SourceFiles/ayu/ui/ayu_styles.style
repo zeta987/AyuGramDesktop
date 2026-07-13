@@ -28,6 +28,7 @@ botWebViewPanelWidthIncreased: 512px;
 stickerRoundingSize: 5px;
 
 messageShotPadding: 4px;
+messageShotBoxOuterSkip: 16px;
 
 topBarAdmins: IconButton {
 	width: 40px;

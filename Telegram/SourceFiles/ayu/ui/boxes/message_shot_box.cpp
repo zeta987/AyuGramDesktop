@@ -11,6 +11,7 @@
 #include "ayu/ui/boxes/theme_selector_box.h"
 #include "ayu/ui/components/image_view.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/event_filter.h"
 #include "boxes/abstract_box.h"
 #include "data/data_chat.h"
 #include "data/data_channel.h"
@@ -425,7 +426,9 @@ void MessageShotBox::setupContent() {
 	updatePreview();
 	firstPreviewLatch->await(std::chrono::seconds(1));
 
-	const auto boxWidth = imageView->getImage().width() / style::DevicePixelRatio() + (st::boxPadding.left() + st::boxPadding.right()) * 4;
+	const auto desiredBoxWidth = imageView->getImage().width()
+		/ style::DevicePixelRatio()
+		+ (st::boxPadding.left() + st::boxPadding.right()) * 4;
 
 	boxClosing() | rpl::on_next(
 		[=]
@@ -438,7 +441,45 @@ void MessageShotBox::setupContent() {
 		},
 		content->lifetime());
 
-	setDimensionsToContent(boxWidth, content);
+	const auto countBoxWidth = [=] {
+		const auto outer = getDelegate()->outerContainer();
+		if (!outer) {
+			return desiredBoxWidth;
+		}
+		const auto available = outer->width()
+			- 2 * st::messageShotBoxOuterSkip;
+		return (available > 0)
+			? std::min(desiredBoxWidth, available)
+			: desiredBoxWidth;
+	};
+
+	const auto appliedBoxWidth = content->lifetime().make_state<int>(0);
+	const auto applyDimensions = [=] {
+		const auto newWidth = countBoxWidth();
+		if (*appliedBoxWidth != newWidth) {
+			*appliedBoxWidth = newWidth;
+			content->resizeToWidth(newWidth);
+		}
+		setDimensions(newWidth, content->height());
+	};
+
+	applyDimensions();
+
+	content->heightValue() | rpl::skip(1) | rpl::on_next(
+		[=]
+		{
+			applyDimensions();
+		},
+		content->lifetime());
+
+	if (const auto outer = getDelegate()->outerContainer()) {
+		base::install_event_filter(this, outer, [=](not_null<QEvent*> e) {
+			if (e->type() == QEvent::Resize) {
+				applyDimensions();
+			}
+			return base::EventFilterResult::Continue;
+		});
+	}
 
 	scrollToWidget(latestToggle);
 }

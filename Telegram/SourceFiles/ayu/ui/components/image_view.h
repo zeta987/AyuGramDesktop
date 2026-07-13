@@ -18,6 +18,7 @@ public:
 	QImage getImage() const;
 
 protected:
+	int resizeGetHeight(int newWidth) override;
 	void paintEvent(QPaintEvent *e) override;
 	void mousePressEvent(QMouseEvent *e) override;
 

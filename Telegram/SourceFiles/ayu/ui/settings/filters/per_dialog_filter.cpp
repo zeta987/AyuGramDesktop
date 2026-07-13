@@ -12,6 +12,7 @@
 #include "ayu/ui/settings/filters/settings_filters_list.h"
 #include "ayu/utils/telegram_helpers.h"
 #include "data/data_peer.h"
+#include "lang/lang_instance.h"
 #include "data/data_session.h"
 #include "main/main_session.h"
 #include "styles/style_menu_icons.h"
@@ -37,7 +38,10 @@ QString PerDialogFiltersListRow::generateName() {
 		this->setPeer(from);
 		return PeerListRow::generateName();
 	}
-	return u"未知（ID：%1）"_q.arg(QString::number(peerId.value & PeerId::kChatTypeMask));
+	const auto pattern = Lang::GetInstance().isChineseContext()
+		? u"未知（ID：%1）"_q
+		: u"UNKNOWN (ID: %1)"_q;
+	return pattern.arg(QString::number(peerId.value & PeerId::kChatTypeMask));
 }
 
 PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bool forceRound) {

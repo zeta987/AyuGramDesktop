@@ -6,6 +6,7 @@
 // Copyright @Radolyn, 2026
 #include "ayu/ayu_infra.h"
 
+#include "ayu/ayu_lang.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/ayu_ui_settings.h"
 #include "ayu/ayu_worker.h"
@@ -55,6 +56,7 @@ void initIcon() {
 }
 
 void init() {
+	AyuLanguage::init();
 	initDatabase();
 	initUiSettings();
 	initIcon();

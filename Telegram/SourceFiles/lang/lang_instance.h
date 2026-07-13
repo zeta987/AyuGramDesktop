@@ -34,6 +34,7 @@ inline bool operator!=(const Language &a, const Language &b) {
 QString CloudLangPackName();
 QString CustomLanguageId();
 Language DefaultLanguage();
+[[nodiscard]] bool IsChineseLanguageId(const QString &id);
 
 class Instance;
 Instance &GetInstance();
@@ -69,6 +70,7 @@ public:
 	QString nativeName() const;
 	QString id(Pack pack) const;
 	bool isCustom() const;
+	[[nodiscard]] bool isChineseContext() const;
 	int version(Pack pack) const;
 
 	QByteArray serialize() const;
@@ -108,6 +110,7 @@ public:
 	void resetValue(const QByteArray &key);
 	void applyValue(const QByteArray &key, const QByteArray &value);
 	void updatePluralRules();
+	void notifyUpdated();
 
 private:
 	void setBaseId(const QString &baseId, const QString &pluralId);
@@ -125,6 +128,7 @@ private:
 		const QString &relativePath,
 		const QByteArray &content);
 	void updateChoosingStickerReplacement();
+	[[nodiscard]] bool isChineseLanguagePack() const;
 
 	Instance *_derived = nullptr;
 

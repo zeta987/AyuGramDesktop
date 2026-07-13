@@ -30,6 +30,10 @@ private:
 	AyuLanguage();
 	~AyuLanguage() override = default;
 
+	void refresh();
+	void applyBundledTaiwanChinese();
+	void resetBundledTaiwanChinese();
+
 	void loadCachedLanguage();
 	void saveCachedLanguage(const QByteArray &json, const QString &langId);
 	[[nodiscard]] QString getCacheDir() const;
@@ -39,4 +43,7 @@ private:
 	QNetworkReply *_chkReply = nullptr;
 	bool needFallback = false;
 	QString _currentLangId;
+	bool _bundledTaiwanChineseApplied = false;
+	bool _applyingBundledTaiwanChinese = false;
+	rpl::lifetime _lifetime;
 };

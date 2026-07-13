@@ -61,6 +61,11 @@ jobs:
           $isBeta = -not [string]::IsNullOrEmpty($Matches.suffix)
           $versionFile = Join-Path $env:SOURCE_DIR 'Telegram/build/version'
           $versionHeader = Join-Path $env:SOURCE_DIR 'Telegram/SourceFiles/core/version.h'
+          $resourceFiles = @(
+            Join-Path $env:SOURCE_DIR 'Telegram/Resources/winrc/Telegram.rc'
+            Join-Path $env:SOURCE_DIR 'Telegram/Resources/winrc/Updater.rc'
+          )
+          $appxManifest = Join-Path $env:SOURCE_DIR 'Telegram/Resources/uwp/AppX/AppxManifest.xml'
           $values = @{}
           foreach ($line in Get-Content -LiteralPath $versionFile) {
             if ($line -match '^(?<name>\w+)\s+(?<value>\S+)$') {
@@ -91,13 +96,38 @@ jobs:
             throw 'core/version.h does not match Telegram/build/version.'
           }
 
-          git -C $env:SOURCE_DIR fetch origin release/current --no-tags
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Could not fetch origin/release/current.'
+          $expectedResourceVersion = "$expectedVersion.0"
+          $expectedResourceTuple = (($parts + '0') -join ',')
+          foreach ($resourceFile in $resourceFiles) {
+            $resource = Get-Content -LiteralPath $resourceFile -Raw
+            $resourceLeaf = Split-Path -Leaf $resourceFile
+            foreach ($directive in @('FILEVERSION', 'PRODUCTVERSION')) {
+              $directivePattern = '(?m)^\s*{0}\s+{1}\s*$' -f [regex]::Escape($directive), [regex]::Escape($expectedResourceTuple)
+              if ($resource -notmatch $directivePattern) {
+                throw "$resourceLeaf does not contain $directive $expectedResourceTuple."
+              }
+            }
+            foreach ($field in @('FileVersion', 'ProductVersion')) {
+              $fieldPattern = 'VALUE\s+"{0}",\s+"{1}"' -f [regex]::Escape($field), [regex]::Escape($expectedResourceVersion)
+              if ($resource -notmatch $fieldPattern) {
+                throw "$resourceLeaf does not contain $field $expectedResourceVersion."
+              }
+            }
           }
-          git -C $env:SOURCE_DIR merge-base --is-ancestor $env:GITHUB_SHA origin/release/current
+
+          $appx = Get-Content -LiteralPath $appxManifest -Raw
+          $appxPattern = 'Version="{0}"' -f [regex]::Escape($expectedResourceVersion)
+          if ($appx -notmatch $appxPattern) {
+            throw "AppxManifest.xml does not contain Version=$expectedResourceVersion."
+          }
+
+          git -C $env:SOURCE_DIR fetch origin dev --no-tags
           if ($LASTEXITCODE -ne 0) {
-            throw 'The tag commit is not contained in origin/release/current.'
+            throw 'Could not fetch origin/dev.'
+          }
+          git -C $env:SOURCE_DIR merge-base --is-ancestor $env:GITHUB_SHA origin/dev
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The tag commit is not contained in origin/dev.'
           }
 
           $headers = @{
@@ -199,8 +229,29 @@ jobs:
           $out = Join-Path $env:SOURCE_DIR "out\$env:BUILD_CONFIG"
           $stage = Join-Path $env:GITHUB_WORKSPACE 'artifact\AyuGram'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item -LiteralPath (Join-Path $out 'AyuGram.exe') -Destination $stage
-          Copy-Item -LiteralPath (Join-Path $out 'Updater.exe') -Destination $stage
+
+          $tagMatch = [regex]::Match(
+            $env:GITHUB_REF_NAME,
+            '^v(?<version>\d+\.\d+\.\d+)(?:-beta\.\d+)?$')
+          if (-not $tagMatch.Success) {
+            throw "Unsupported release tag while packaging: $env:GITHUB_REF_NAME"
+          }
+          $expectedFileVersion = "$($tagMatch.Groups['version'].Value).0"
+          $binaryVersions = @{}
+          $binaryPaths = @(
+            Join-Path $out 'AyuGram.exe'
+            Join-Path $out 'Updater.exe'
+          )
+          foreach ($binaryPath in $binaryPaths) {
+            $binary = Get-Item -LiteralPath $binaryPath
+            $fileVersion = [string]$binary.VersionInfo.FileVersion
+            $productVersion = [string]$binary.VersionInfo.ProductVersion
+            if ($fileVersion -ne $expectedFileVersion -or $productVersion -ne $expectedFileVersion) {
+              throw "$($binary.Name) version $fileVersion/$productVersion does not match $expectedFileVersion."
+            }
+            $binaryVersions[$binary.Name] = $fileVersion
+            Copy-Item -LiteralPath $binaryPath -Destination $stage
+          }
 
           $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $stage 'AyuGram.exe')
           $suffix = if ($env:IS_TAG -eq 'true') {
@@ -211,7 +262,11 @@ jobs:
           $info = @(
             "Commit=$env:GITHUB_SHA"
             "Ref=$env:GITHUB_REF"
+            "ReleaseTag=$env:GITHUB_REF_NAME"
             "Configuration=$env:BUILD_CONFIG"
+            "ExpectedFileVersion=$expectedFileVersion"
+            "AyuGramFileVersion=$($binaryVersions['AyuGram.exe'])"
+            "UpdaterFileVersion=$($binaryVersions['Updater.exe'])"
             "Authenticode=$($signature.Status)"
           )
           $info | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding ascii

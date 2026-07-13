@@ -105,7 +105,9 @@ QString currentVersionText() {
 	if (cAlphaVersion()) {
 		result += u" alpha %1"_q.arg(cAlphaVersion() % 1000);
 	} else if (AppBetaVersion) {
-		result += " beta";
+		result += (AppBetaVersionSerial > 0)
+			? u" beta.%1"_q.arg(AppBetaVersionSerial)
+			: u" beta"_q;
 	}
 	if (Platform::IsWindows64Bit()) {
 		result += " x64";

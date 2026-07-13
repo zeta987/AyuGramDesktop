@@ -1293,6 +1293,7 @@ void Controller::createWindow() {
 
 	_titleShadow->raise();
 	window->show();
+	window->setNativeFrame(false);
 }
 
 std::unique_ptr<Controller> TryOpenLocalFile(

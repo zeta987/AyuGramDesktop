@@ -2,7 +2,7 @@
 
 ![AyuGram Logo](.github/AyuGram.png) ![AyuChan](.github/AyuChan.png)
 
-[ English  |  [繁體中文](README.zh-TW.md)  |  [Русский](README-RU.md) ]
+[ English  |  [正體中文](README.zh-TW.md)  |  [Русский](README-RU.md) ]
 
 ## Features
 
@@ -39,6 +39,8 @@ And many more. Check out our [Documentation](https://docs.ayugram.one/desktop/).
 
 This fork publishes its own Windows x64 releases on the
 [Releases page](https://github.com/zeta987/AyuGramDesktop/releases).
+The v6.9.4 beta series is based on upstream commit
+[telegramdesktop/tdesktop@ed73b49d0110](https://github.com/telegramdesktop/tdesktop/commit/ed73b49d0110a8e949e7fe06a8a90bd7e7b421a8).
 Summary of each beta; see [CHANGELOG.md](CHANGELOG.md) for details.
 
 - **beta.8** — Message Shot box adapts to the window width (proportional preview downscaling, Save/Copy always visible); beta serial shown in the in-app version text; Egyptian Hieroglyphs font fallback.

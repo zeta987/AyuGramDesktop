@@ -2,7 +2,7 @@
 
 ![AyuGram Logo](.github/AyuGram.png) ![AyuChan](.github/AyuChan.png)
 
-[ [English](README.md)  |  繁體中文  |  [Русский](README-RU.md) ]
+[ [English](README.md)  |  正體中文  |  [Русский](README-RU.md) ]
 
 ## 功能特色
 
@@ -38,7 +38,9 @@
 ## 本 fork 的發布版本（v6.9.4 beta 系列）
 
 本 fork 在 [Releases 頁面](https://github.com/zeta987/AyuGramDesktop/releases)
-發布自建的 Windows x64 版本。以下是各 beta 的摘要；詳細內容請見
+發布自建的 Windows x64 版本。v6.9.4 beta 系列基於上游提交
+[telegramdesktop/tdesktop@ed73b49d0110](https://github.com/telegramdesktop/tdesktop/commit/ed73b49d0110a8e949e7fe06a8a90bd7e7b421a8)
+合併。以下是各 beta 的摘要；詳細內容請見
 [CHANGELOG.md](CHANGELOG.md)。
 
 - **beta.8** — 訊息截圖彈窗自適應視窗寬度（預覽等比縮小、儲存／複製按鈕始終可見）；App 內版本文字顯示 beta 序號；埃及聖書體字型 fallback。

@@ -1077,7 +1077,7 @@ depends:patches/libvpx/*.patch
 win:
     for /r %%i in (..\\patches\\libvpx\\*) do git apply %%i
 
-    SET PATH=%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
+    SET PATH=%THIRDPARTY_DIR%\\msys64\\mingw64\\bin;%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
     SET CHERE_INVOKING=enabled_from_arguments
     SET MSYS2_PATH_TYPE=inherit
 
@@ -1089,6 +1089,9 @@ winarm:
     SET "TOOLCHAIN=arm64-win64-vs17-v145"
 win:
 depends:patches/build_libvpx_win.sh
+    # Use NASM and serialize Debug and Release solution launches to avoid corrupt ASM output.
+    SET "AS=nasm"
+    SET "NUMBER_OF_PROCESSORS=1"
     bash --login ../patches/build_libvpx_win.sh
 mac:
     find ../patches/libvpx -type f -print0 | sort -z | xargs -0 git apply

@@ -137,13 +137,15 @@ repo 內與 Rich Messages 直接相關的持續性文件是
 | anti-recall 資料庫升級 | 已修正升級時清空舊資料的問題；目前電腦的 `D:\TBuild\ayu-verify` 保留 v1 fixture 與檢查工具，但它不是 repo 或新環境的必要目錄。 |
 | Rich Messages 轉傳 fallback | 截斷後綴已改用 `ayu_ForwardTruncatedSuffix` 語言 key；rich-page 文字與 fallback 路徑位於 `Telegram/SourceFiles/ayu/features/forward`。 |
 | IV/Markdown 預覽視窗 | `Iv::Markdown::Controller::createWindow()` 在 `show()` 後呼叫 `setNativeFrame(false)`，避免 Windows 原生標題列在 resize 前殘留。 |
-| AyuGram 設定台灣正體中文 | `051471fb1bcc` 將翻譯分支整合到 `dev`，包含 AyuGram 設定與「實驗性設定」。 |
-| 中文顯示條件 | `19c981c3fd6b` 改為尊重應用程式目前使用的語言；中文 App 語言顯示台灣正體中文，非中文 App 語言維持 AyuGram 原文。不可只依作業系統語言強制翻譯。 |
+| AyuGram 設定正體中文 | `051471fb1bcc` 將翻譯分支整合到 `dev`，包含 AyuGram 設定與「實驗性設定」。 |
+| 中文顯示條件 | `19c981c3fd6b` 改為尊重應用程式目前使用的語言；中文 App 語言顯示正體中文，非中文 App 語言維持 AyuGram 原文。不可只依作業系統語言強制翻譯。 |
 | 版本同步 | 程式版本固定為 6.9.4：`AppVersion=6009004`、`BetaChannel=1`、`AppVersionOriginal=6.9.4.beta`，Windows EXE FileVersion/ProductVersion 是 `6.9.4.0`。 |
 | Windows 建置相容修正 | 已包含 NASM/libvpx、VS runner、C++/WinRT SDK 與 versionless Updater 驗證等修正。 |
 | 本機 Release 封裝 | `7edcd683950c` 整合本機發布程序；後續 `18ad92955e74` 與 `34b714897937` 修正封裝器輸出處理。 |
 | `v6.9.4-beta.7` | 已由 commit `34b714897937` 本機建置並發布；是一般 Release、不是 prerelease，而且是 Latest。 |
 | 埃及聖書體使用者名稱 | `Telegram/lib_ui` 的簽署提交 `3775d69f32b1` 為 Qt 6 加入 Egyptian Hieroglyphs script fallback；superproject 簽署提交 `d0181d6d545a` 已進入本機 `dev`，Debug 實測通過。 |
+| Message Shot 彈窗自適應 | 簽署提交 `ad71f1dcd2` 完成寬度鉗制、預覽等比縮小與視窗縮放跟隨；`baf29d21fe` 讓 App 版本文字顯示 beta 序號（`core/version.h` 的 `AppBetaVersionSerial`）。兩者已整合 `dev` 並推送，Debug 實測通過。 |
+| 發布文件三層規範 | `CHANGELOG.md`（雙語詳細）、`README.md`／`README.zh-TW.md` 摘要區與 `AGENTS.md` 的 Release documentation 規範已建立；每次打 tag 前先完成文件更新。 |
 
 `v6.9.4-beta.7` 的 ZIP 僅包含：
 
@@ -156,13 +158,11 @@ modules/x64/d3d/d3dcompiler_47.dll
 該版本另附 ZIP 的 `.sha256` 與 `BUILD-INFO.txt`。兩個 EXE 均未使用
 Authenticode 憑證簽署，因此 SHA-256 與簽署 Git tag 是必要驗證資料。
 
-2026-07-14 本階段的接手狀態：字型 fallback Debug EXE 的 SHA-256 是
-`CE462E4F9701A6CCFDD10F3042C7E6D72511E032EA1EA5636CB5388E54C9DB42`，
-FileVersion 與 ProductVersion 都是 `6.9.4.0`。`lib_ui` 提交
-`3775d69f32b1` 與 superproject 的 `dev` 新提交都尚未推送，沒有建立新 tag
-或 GitHub Release。使用者已要求先完成本機文件與 commit，發布階段保持暫停；
-未來收到明確指示後，必須先推送 `lib_ui` feature branch 到
-`zeta987/lib_ui`，再推送 `origin/dev`，才能繼續 Release 程序。
+2026-07-14 本階段的接手狀態：`lib_ui` 提交 `3775d69f32b1` 與 superproject
+`dev` 均已推送。Message Shot 彈窗自適應與 beta 序號顯示（`ad71f1dcd2`、
+`baf29d21fe`）已整合 `dev` 並推送，Debug 實測通過（SHA-256
+`474DB02AE0D174CE8727198000D93DFE276EB94B250B6895E99ECB1451888538`），
+使用者已確認並要求發布 `v6.9.4-beta.8`。
 
 ## 正常開發循環
 
@@ -297,8 +297,11 @@ cmake --build <RepoRoot>\out --config Release --target Telegram --parallel 4
 ```
 
 目前 6.9.4 系列的 `AyuGram.exe` FileVersion 與 ProductVersion 都必須是
-`6.9.4.0`。`beta.N` 只由簽署 tag、Release 名稱與資產名稱識別，不應把
-應用程式版本任意改成其他 Telegram 上游版本。
+`6.9.4.0`。`beta.N` 由簽署 tag、Release 名稱、資產名稱與 App 內版本文字
+（`core/version.h` 的 `AppBetaVersionSerial`）識別，不應把應用程式版本
+任意改成其他 Telegram 上游版本。每次發布新 beta 前，先更新
+`AppBetaVersionSerial`，並依 `AGENTS.md` 的 Release documentation 規範
+完成 `README.md`、`README.zh-TW.md` 摘要與 `CHANGELOG.md` 雙語詳細條目。
 
 Release 建置完成後，先用乾淨 `-workdir` 執行煙霧測試，再檢查版本、檔案
 大小、SHA-256、Updater 與 modules。不要把 PDB 放進發布 ZIP。
@@ -447,23 +450,15 @@ Release 由本機建置、封裝，再以 `gh release create` 上傳。
 
 ### 訊息截圖彈窗自適應
 
-狀態：已確認問題，尚未修改程式碼。
+狀態：已完成並整合 `dev`（簽署提交 `ad71f1dcd2`）。
 
-主要位置是
-`Telegram/SourceFiles/ayu/ui/boxes/message_shot_box.cpp`。目前約在
-`boxWidth` 與 `setDimensionsToContent()` 附近，寬度直接來自預覽圖片寬度加
-padding，內容高度也在一次性尺寸計算後固定。主視窗或可用螢幕區域較窄時，
-底部「儲存」「複製」等操作按鈕可能落在可視區域外。
-
-後續修正必須：
-
-- 將彈窗寬高限制在目前視窗或可用螢幕區域內。
-- 預覽與設定內容可以捲動，但主要操作按鈕始終可見且可按。
-- 尺寸、padding 與 breakpoint 使用 `.style` 值，避免直接硬編碼未縮放像素。
-- 保留大型預覽在寬視窗中的現有體驗。
-- 驗證窄視窗、長訊息、短訊息、中文與英文 UI、100%/125%/150%/200%
-  縮放，以及所有操作按鈕都能鍵盤與滑鼠操作。
-- 先產出 Debug EXE 給開發者確認，再考慮進入 `dev` 與下一個 Release。
+彈窗寬度以 `getDelegate()->outerContainer()` 寬度減
+`st::messageShotBoxOuterSkip` 為上限，並以 resize event filter 跟隨視窗
+縮放；`ImageView` 覆寫 `resizeGetHeight()` 讓預覽等比縮小、繪製走
+`PainterHighQualityEnabler`，`getImage()` 維持原始解析度。注意
+`setDimensionsToContent()` 不可重複呼叫（heightValue 訂閱會累積），動態
+寬度必須自行管理單一訂閱。尚未逐項驗證：125%/150%/200% 縮放、英文 UI、
+Save 對話框、鍵盤走訪、多則與短訊息、主題選擇器互動。
 
 ### 仍需重新驗證的歷史待辦
 

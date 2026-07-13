@@ -2,7 +2,7 @@
 
 ![AyuGram Logo](.github/AyuGram.png) ![AyuChan](.github/AyuChan.png)
 
-[ English  |   [Русский](README-RU.md) ]
+[ English  |  [繁體中文](README.zh-TW.md)  |  [Русский](README-RU.md) ]
 
 ## Features
 
@@ -34,6 +34,21 @@ And many more. Check out our [Documentation](https://docs.ayugram.one/desktop/).
     </table>
   </details>
 </h3>
+
+## Fork releases (v6.9.4 beta series)
+
+This fork publishes its own Windows x64 releases on the
+[Releases page](https://github.com/zeta987/AyuGramDesktop/releases).
+Summary of each beta; see [CHANGELOG.md](CHANGELOG.md) for details.
+
+- **beta.8** — Message Shot box adapts to the window width (proportional preview downscaling, Save/Copy always visible); beta serial shown in the in-app version text; Egyptian Hieroglyphs font fallback.
+- **beta.7** — Local Windows release packaging flow with signed-tag validation; GitHub Actions demoted to manual fallback; Chinese Ayu settings follow the active app language.
+- **beta.6** — Fixed the NASM executable path in CI (absolute, quoted).
+- **beta.5** — Pinned NASM 3.01 for libvpx.
+- **beta.4** — Built libvpx with NASM to fix the Windows release build.
+- **beta.3** — Switched CI to the VS 2022 runner for the v143 toolset.
+- **beta.2** — Merged 6.9.4 integrations into dev; hardened release CI validation.
+- **beta.1** — Merged upstream Telegram 6.9.4 Rich Messages into AyuGram (anti-recall persistence, Message Shot preloading, forward/edit fixes); Traditional Chinese localization for Ayu settings; fork submodules and version sync.
 
 ## Downloads
 

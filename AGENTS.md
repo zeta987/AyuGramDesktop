@@ -229,6 +229,22 @@ another build process still owns the output or PDB file.
 - Use signed annotated release tags that point at the verified `dev` commit.
 - Do not push commits, tags, or release assets until the user explicitly asks.
 
+## Release documentation
+
+Every release tag ships with documentation updates, committed to `dev`
+**before** the tag is created so the tag contains them:
+
+- Add a one-line summary of the tag to the fork-release summary section of
+  `README.md` (English) and `README.zh-TW.md` (Traditional Chinese).
+- Add a detailed entry for the tag to `CHANGELOG.md`, bilingual in
+  Traditional Chinese and English, newest tag first.
+- Write the GitHub Release notes describing what the **current tag** changed,
+  always bilingual in Traditional Chinese and English. Do not restate
+  the full history in later releases; link to `CHANGELOG.md` for older tags.
+- Keep the three layers consistent: README carries summaries, CHANGELOG.md
+  carries details, and the GitHub Release carries the current tag's work plus
+  build information (commit, versions, SHA-256).
+
 ## Local Storage Serialization
 
 Both app-level (`Core::Settings`) and session-level (`Main::SessionSettings`) use sequential binary serialization via `QDataStream`. Key rules:

@@ -321,26 +321,44 @@ jobs:
             throw "Unsupported release tag while packaging: $env:GITHUB_REF_NAME"
           }
           $expectedFileVersion = "$($tagMatch.Groups['version'].Value).0"
-          $binaryVersions = @{}
-          $binaryPaths = @(
-            Join-Path $out 'AyuGram.exe'
-            Join-Path $out 'Updater.exe'
-          )
-          foreach ($binaryPath in $binaryPaths) {
-            $binary = Get-Item -LiteralPath $binaryPath
-            $fileVersion = [string]$binary.VersionInfo.FileVersion
-            $productVersion = [string]$binary.VersionInfo.ProductVersion
-            if ($fileVersion -ne $expectedFileVersion -or $productVersion -ne $expectedFileVersion) {
-              throw "$($binary.Name) version $fileVersion/$productVersion does not match $expectedFileVersion."
-            }
-            $binaryVersions[$binary.Name] = $fileVersion
-            Copy-Item -LiteralPath $binaryPath -Destination $stage
+          $ayuGram = Get-Item -LiteralPath (Join-Path $out 'AyuGram.exe')
+          $ayuGramFileVersion = [string]$ayuGram.VersionInfo.FileVersion
+          $ayuGramProductVersion = [string]$ayuGram.VersionInfo.ProductVersion
+          if ($ayuGramFileVersion -ne $expectedFileVersion -or $ayuGramProductVersion -ne $expectedFileVersion) {
+            throw "AyuGram.exe version $ayuGramFileVersion/$ayuGramProductVersion does not match $expectedFileVersion."
           }
+          $updater = Get-Item -LiteralPath (Join-Path $out 'Updater.exe')
+          if ($updater.Length -le 0) {
+            throw 'Updater.exe is empty.'
+          }
+          Copy-Item -LiteralPath $ayuGram.FullName -Destination $stage
+          Copy-Item -LiteralPath $updater.FullName -Destination $stage
 
           $modulePath = Join-Path $out 'modules\x64\d3d\d3dcompiler_47.dll'
+          if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
+            $modulePath = Join-Path $env:SOURCE_DIR 'cmake\win_directx_helper\modules\x64\d3d\d3dcompiler_47.dll'
+          }
+          $module = Get-Item -LiteralPath $modulePath
+          $moduleVersionInfo = $module.VersionInfo
+          $moduleVersion = '{0}.{1}.{2}.{3}' -f @(
+            $moduleVersionInfo.FileMajorPart,
+            $moduleVersionInfo.FileMinorPart,
+            $moduleVersionInfo.FileBuildPart,
+            $moduleVersionInfo.FilePrivatePart
+          )
+          if ($moduleVersion -ne '10.0.22621.3233') {
+            throw "Unexpected d3dcompiler_47.dll version: $moduleVersion"
+          }
+          $moduleHash = (Get-FileHash -LiteralPath $modulePath -Algorithm SHA256).Hash
+          if ($moduleHash -ne 'A05D04A270F68C8C6D6EA2D23BEBF8CD1D5453B26B5442FA54965F90F1C62082') {
+            throw "Unexpected d3dcompiler_47.dll SHA-256: $moduleHash"
+          }
           Copy-Item -LiteralPath $modulePath -Destination $moduleDirectory
 
           $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $stage 'AyuGram.exe')
+          $updaterSignature = Get-AuthenticodeSignature -LiteralPath (Join-Path $stage 'Updater.exe')
+          $ayuGramHash = (Get-FileHash -LiteralPath $ayuGram.FullName -Algorithm SHA256).Hash
+          $updaterHash = (Get-FileHash -LiteralPath $updater.FullName -Algorithm SHA256).Hash
           $suffix = if ($env:IS_TAG -eq 'true') {
             $env:GITHUB_REF_NAME
           } else {
@@ -352,9 +370,13 @@ jobs:
             "ReleaseTag=$env:GITHUB_REF_NAME"
             "Configuration=$env:BUILD_CONFIG"
             "ExpectedFileVersion=$expectedFileVersion"
-            "AyuGramFileVersion=$($binaryVersions['AyuGram.exe'])"
-            "UpdaterFileVersion=$($binaryVersions['Updater.exe'])"
-            "Authenticode=$($signature.Status)"
+            "AyuGramFileVersion=$ayuGramFileVersion"
+            "UpdaterFileVersion=$([string]$updater.VersionInfo.FileVersion)"
+            "AyuGramAuthenticode=$($signature.Status)"
+            "UpdaterAuthenticode=$($updaterSignature.Status)"
+            "AyuGramSha256=$ayuGramHash"
+            "UpdaterSha256=$updaterHash"
+            "D3DCompilerSha256=$moduleHash"
           )
           $infoPath = Join-Path $env:GITHUB_WORKSPACE "artifact\AyuGram-Windows-x64-$suffix-BUILD-INFO.txt"
           $info | Set-Content -LiteralPath $infoPath -Encoding ascii

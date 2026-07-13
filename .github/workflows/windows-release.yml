@@ -2,27 +2,15 @@ name: Windows x64
 
 on:
   push:
-    branches:
-      - release/current
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      configuration:
-        description: Build configuration
-        required: true
-        default: Debug
-        type: choice
-        options:
-          - Debug
-          - Release
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: false
 
 env:
   REPO_NAME: AyuGramDesktop
@@ -36,8 +24,8 @@ jobs:
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     env:
-      BUILD_CONFIG: ${{ startsWith(github.ref, 'refs/tags/') && 'Release' || (github.event_name == 'workflow_dispatch' && inputs.configuration || 'Debug') }}
-      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+      BUILD_CONFIG: Release
+      IS_TAG: 'true'
     defaults:
       run:
         shell: cmd
@@ -60,7 +48,6 @@ jobs:
           persist-credentials: false
 
       - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -188,11 +175,7 @@ jobs:
 
       - name: Prepare libraries
         run: |
-          if "%BUILD_CONFIG%"=="Release" (
-            call "%SOURCE_DIR%\Telegram\build\prepare\win.bat" silent qt6
-          ) else (
-            call "%SOURCE_DIR%\Telegram\build\prepare\win.bat" skip-release silent qt6
-          )
+          call "%SOURCE_DIR%\Telegram\build\prepare\win.bat" silent qt6
           if errorlevel 1 exit /b %errorlevel%
 
       - name: Configure and build
@@ -249,11 +232,10 @@ jobs:
             artifact/*.zip
             artifact/*.sha256
           if-no-files-found: error
-          retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 90 || 14 }}
+          retention-days: 90
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-24.04
     permissions:

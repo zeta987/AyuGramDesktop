@@ -8898,6 +8898,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_AyuForwardStatusFinished" = "Done";
 "ayu_AyuForwardStatusSentCount" = "sent {count1} of {count2}";
 "ayu_AyuForwardStatusChunkCount" = "chunk {count1} of {count2}";
+"ayu_ForwardTruncatedSuffix" = " [message truncated]";
 "ayu_CreationDateUserApproximately" = "**{item1}** created their account approximately on **{item2}**.";
 "ayu_CreationDateUserEarlier" = "**{item1}** created their account earlier than **{item2}**.";
 "ayu_CreationDateUserLater" = "**{item1}** created their account later than **{item2}**.";

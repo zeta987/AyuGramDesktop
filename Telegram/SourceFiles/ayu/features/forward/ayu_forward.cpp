@@ -400,7 +400,7 @@ void forwardMessages(
 			: extractText(item);
 		if (outcome.status == AyuSync::RichSendResult::PlainFallbackTruncated
 			&& !extractedText.text.isEmpty()) {
-			extractedText.text += u" [message truncated]"_q;
+			extractedText.text += tr::ayu_ForwardTruncatedSuffix(tr::now);
 		}
 		if (extractedText.empty() && !mediaDownloadable(item->media())) {
 			continue;

@@ -50,7 +50,7 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 | `Telegram/SourceFiles/apiwrap.cpp` | Ayu pseudo-reply、AyuForward 權限例外、SendDice 分流與 upstream Rich send/draft/edit/ephemeral 路徑 |
 | `Telegram/SourceFiles/data/data_channel.h` | Ayu no-forward state 與新版 community flags |
 | `Telegram/SourceFiles/data/data_document_resolver.cpp` | Ayu document resolve hooks 與新版 resolver API |
-| `Telegram/SourceFiles/data/data_session.cpp` | Ayu deleted/edited snapshot、TTL delete hooks 與 upstream batched destroy notifications；rich edit 以文字與 `RichPage` 等值判斷去重，重播或未變更的編輯不重複寫入 |
+| `Telegram/SourceFiles/data/data_session.cpp` | Ayu deleted/edited snapshot、TTL delete hooks 與 upstream batched destroy notifications；rich 訊息以 `RichPage` 等值判斷去重（純文字訊息維持文字比對），重播或純 markup 編輯不重複寫入 |
 | `Telegram/SourceFiles/data/data_types.h` | Ayu protected-forward state與 upstream guest-chat/ephemeral flags |
 | `Telegram/SourceFiles/history/history_item.cpp` | Ayu TTL、deleted state、filterZalgo 與 upstream RichPage receive/edit/echo/full-page lifecycle |
 | `Telegram/SourceFiles/history/history_item_text.cpp` | Ayu summaryEntry copy precedence 與 upstream rich/plain clipboard fallback |
@@ -97,11 +97,21 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 - lib_ui `EntityInText::_local` 未初始化：submodule `ui/text/text_entity.h` 補回 `= false`，避免 `isLocal()` 與 defaulted 比較運算子讀取未初始化記憶體。
 - DeleteMessagesBox Ayu moderate 遺失：上游把邏輯搬到 `moderate_messages_box.cpp` 後，刪除自己 out() 訊息時的「刪除該使用者全部訊息」選項消失。於 `CalculateModerateOptions` 補回 self out()（`canDeleteMessages() && !isBroadcast()`）路徑；`delete_messages_box.cpp` 維持與上游 byte-identical，先前「逐段保留 Ayu 功能」的敘述已更正。
 - hideSimilarChannels 死開關：classic 與 tabbed 兩條 profile 路徑（`info_profile_shared_media_classic.cpp`、`info_profile_inner_widget.cpp`）補回 gate。
-- Rich edit 去重：`data_session.cpp` 以文字與 `RichPage` 等值判斷去重。
-- AyuForward partial 截斷轉傳：`ayu_sync.cpp`/`.h`、`ayu_forward.cpp` 在 partial page 時先用 `Iv::Instance::resolveRichMessage` 取全文再送 rich；取回失敗改走非靜默 fallback（以 flatten full page 或附加 `[message truncated]` 標記），並在等待期間重新以 `FullMsgId` 取回 item 避免 use-after-free。
+- Rich edit 去重：`data_session.cpp` 對 rich 訊息以 `RichPage` 等值判斷去重（rich 的 wire message 恆為空、client 端文字為 flatten summary，故不能以文字比對），純文字訊息維持文字比對。
+- AyuForward partial 截斷轉傳：`ayu_sync.cpp`/`.h`、`ayu_forward.cpp` 在 partial page 時先用 `Iv::Instance::resolveRichMessage` 取全文；可送 rich 時照送，只能送 plain 的路徑（non-premium、NoNamesAndCaptions）則以 full page flatten 出完整文字，兩者取回失敗都改走非靜默 fallback（flatten 現有 full page 或於既有文字後附加 `[message truncated]` 標記），並在等待期間重新以 `FullMsgId` 取回 item 避免 use-after-free。
 - Minor：ViewButton ripple 改回 `cache->bg2`；`HasSavableContent` 移除 `item->media()` 分支使 media-only 刪除訊息不再寫入空 row；未登入 intro 進入點改回 `Qr`；Message Shot 補收 `EmbedPost` 作者頭像；本機 `setRichPage` 保留既有 rich blob。
 
 跳過：`UseTelegramRichTranslation()` 與 `CreateTranslateProvider()` 的第二層 null-native fallback 不對稱，因鏡像該層需在 predicate 內建構 provider（副作用），非乾淨修法，暫予保留。
+
+## 第二輪覆核 + Release 實編修復（2026-07-13）
+
+第二輪對抗覆核與 Release 實編抓到首輪修復的殘餘問題，已再修一輪，同樣為獨立簽章 commit：
+
+- Release 編譯失敗：`ayu_forward.cpp` 的截斷標記原以 `constexpr` QString 宣告觸發 MSVC C2131，改為非 constexpr 的 `u"..."_q` 字面值，且只在既有文字非空時附加，不會單獨成為整則內容。
+- Rich 編輯去重對 rich 訊息實際失效：rich 的 `existing->originalText()` 恆為 flatten summary、`edit.textWithEntities` 恆為空，故 textUnchanged 永遠 false；補上 `bothRich` 判斷，兩邊皆有 rich page 時只以 `RichPagesEqual` 決定跳過。
+- Non-premium / NoNamesAndCaptions 仍靜默截斷：`CanSendRichMessages` 等於 `premium()`，該 gate 原本 partial page 時直接 PlainFallback 而不 resolve；改以 `plainOnly` 併入 `sendResolvedPage`，plain-only 路徑同樣先 resolve 全文再 flatten，取不到才標記截斷。
+- `resolveRichMessage` 丟棄 callback 害 latch 卡 5 分鐘：generation 不符 reset 與 session teardown 兩處會銷毀已註冊 callback 卻不呼叫，改為銷毀前先以 `nullptr` flush，背景 forward latch 不再逾時假死。
+- 其他：`SuggestSelfDeleteAllReport` 補上 `isDeleted()` 防護（本機保留的 ghost 自訊息不叫出無效 moderate box）；`HasSavableContent` 補上 summary 非空也存並移除未使用的 `item` 參數；intro 退化三元運算簡化為單一 `Qr`；移除不符註解政策的說明註解。
 
 ## 未執行的 generated outputs 與 CI
 

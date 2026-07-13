@@ -88,7 +88,7 @@
 | RegexFilter | 比對 visible summary，不讀 serialized TL bytes | `PENDING-RUNTIME` |
 | dialog/notification fallback | rich-only message 顯示非空 summary | `PENDING-RUNTIME` |
 | normal forward | upstream path保留 Rich structure | `PENDING-SERVER` |
-| Ayu protected forward | 主執行緒送出完整 RichPage；partial page 先 `resolveRichMessage` 取全文再送，取回失敗以 flatten full page 或附加 `[message truncated]` 標記的非靜默 fallback | `PENDING-SERVER` |
+| Ayu protected forward | 主執行緒送出完整 RichPage；partial page 先 `resolveRichMessage` 取全文，可送 rich 時送 rich、只能 plain 時（含 non-premium、NoNamesAndCaptions）flatten 全文，皆不靜默截斷；取回失敗才 flatten 現有 full page 或附加 `[message truncated]` 標記 | `PENDING-SERVER` |
 | protected forward file reference | refresh 使用來源 message origin，失敗 fallback 不建立 cloud draft | `PASS` source inspection |
 | copy/export | native rich/plain fallback 不為空且不遺失可見內容 | `PENDING-RUNTIME` |
 

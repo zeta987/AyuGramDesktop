@@ -63,16 +63,16 @@
 | audio/voice | playback、playlist與 file refresh 正確，不進 visual gallery | `PENDING-RUNTIME` |
 | media-only partial page | ordinary text 空白仍可顯示與 Show more | `PENDING-SERVER` |
 | delete cleanup | Rich media release/cache cleanup 不遺漏 | `PENDING-RUNTIME` |
-| Message Shot preload | Rich photos/documents ready 後才 final render | `PENDING-RUNTIME` |
+| Message Shot preload | Rich photos/documents（含 EmbedPost 作者頭像）ready 後才 final render | `PENDING-RUNTIME` |
 
 ## Ayu anti-recall
 
 | Case | 期待結果 | 狀態 |
 |---|---|---|
-| schema v1 → v2 | 既有 DeletedMessage/EditedMessage rows 全數保留 | `PENDING-RUNTIME` |
+| schema v1 → v2 | 新 rich 欄位改 nullable，升級走 `ALTER TABLE ADD COLUMN` 保留既有 DeletedMessage/EditedMessage rows（SQL 層 ALTER 保留已以 v1 測試 db 驗證） | `PENDING-RUNTIME` |
 | deleted rich | row 同時保存 raw blob、visible summary，可重建 native bubble | `PENDING-SERVER` |
 | edited revisions | 每版 raw blob/summary 獨立保存 | `PENDING-SERVER` |
-| ordinary text empty | rich blob 或 traditional media 存在時仍寫入 row | `PENDING-RUNTIME` |
+| ordinary text empty | rich blob 存在時寫入 row；media-only（無文字、無 rich blob）不再寫入空 row，media 序列化仍為 todo | `PENDING-RUNTIME` |
 | deleted-history search | searchable summary 可命中 visible text | `PENDING-RUNTIME` |
 | malformed stored blob | 使用 summary fallback，不 crash archive | `PENDING-RUNTIME` |
 | archived partial page | 顯示已保存 blocks 與 summary，不以 fake/歷史 id 請求 full page | `PASS` source inspection |
@@ -88,7 +88,7 @@
 | RegexFilter | 比對 visible summary，不讀 serialized TL bytes | `PENDING-RUNTIME` |
 | dialog/notification fallback | rich-only message 顯示非空 summary | `PENDING-RUNTIME` |
 | normal forward | upstream path保留 Rich structure | `PENDING-SERVER` |
-| Ayu protected forward | 主執行緒送出完整 RichPage；partial、capability、serializer 或 API 失敗才 plain fallback | `PENDING-SERVER` |
+| Ayu protected forward | 主執行緒送出完整 RichPage；partial page 先 `resolveRichMessage` 取全文再送，取回失敗以 flatten full page 或附加 `[message truncated]` 標記的非靜默 fallback | `PENDING-SERVER` |
 | protected forward file reference | refresh 使用來源 message origin，失敗 fallback 不建立 cloud draft | `PASS` source inspection |
 | copy/export | native rich/plain fallback 不為空且不遺失可見內容 | `PENDING-RUNTIME` |
 

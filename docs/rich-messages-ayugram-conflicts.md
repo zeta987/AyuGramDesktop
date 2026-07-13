@@ -50,7 +50,7 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 | `Telegram/SourceFiles/apiwrap.cpp` | Ayu pseudo-reply、AyuForward 權限例外、SendDice 分流與 upstream Rich send/draft/edit/ephemeral 路徑 |
 | `Telegram/SourceFiles/data/data_channel.h` | Ayu no-forward state 與新版 community flags |
 | `Telegram/SourceFiles/data/data_document_resolver.cpp` | Ayu document resolve hooks 與新版 resolver API |
-| `Telegram/SourceFiles/data/data_session.cpp` | Ayu deleted/edited snapshot、TTL delete hooks 與 upstream batched destroy notifications；rich-only edit 不被空文字判斷略過 |
+| `Telegram/SourceFiles/data/data_session.cpp` | Ayu deleted/edited snapshot、TTL delete hooks 與 upstream batched destroy notifications；rich edit 以文字與 `RichPage` 等值判斷去重，重播或未變更的編輯不重複寫入 |
 | `Telegram/SourceFiles/data/data_types.h` | Ayu protected-forward state與 upstream guest-chat/ephemeral flags |
 | `Telegram/SourceFiles/history/history_item.cpp` | Ayu TTL、deleted state、filterZalgo 與 upstream RichPage receive/edit/echo/full-page lifecycle |
 | `Telegram/SourceFiles/history/history_item_text.cpp` | Ayu summaryEntry copy precedence 與 upstream rich/plain clipboard fallback |
@@ -68,7 +68,7 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 | `history/view/history_view_message.cpp` | Ayu bubble geometry與 upstream Rich Message measure/paint/hit-test |
 | `history/view/controls/history_view_compose_controls.cpp` | Ayu compose buttons與 upstream Rich draft controls |
 | `history/view/history_view_translate_tracker.h` | 可重建的 Ayu provider 與 upstream Rich translation sender |
-| `history/view/history_view_view_button.cpp` | 採用新版單次 paint path，避免舊 ripple/rounded rect 重複繪製 |
+| `history/view/history_view_view_button.cpp` | 採用新版單次 paint path，避免舊 ripple/rounded rect 重複繪製；ripple 使用 `cache->bg2`，在 rich quote 樣式下維持可見 |
 | `history/view/media/history_view_document.cpp` | Ayu Message Shot/transcribe 行為與 upstream effective-media TTL |
 | `history/view/media/history_view_gif.cpp` | Message Shot 隱藏 transcribe 與 upstream effective-media TTL |
 
@@ -76,7 +76,7 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 
 以下檔案逐段保留 Ayu 功能並改接新版 API，未採整檔 ours 或 theirs。
 
-- `boxes/delete_messages_box.cpp`、`boxes/language_box.cpp`
+- `boxes/language_box.cpp`
 - `chat_helpers/gifs_list_widget.cpp`、`chat_helpers/stickers_list_widget.cpp`
 - `core/click_handler_types.cpp`
 - `dialogs/dialogs_inner_widget.cpp`、`dialogs/dialogs_row.cpp`、`dialogs/dialogs_widget.cpp`
@@ -88,6 +88,20 @@ Ayu 原本刪除的 `.github/workflows/*.yml` 與 `snap/snapcraft.yaml` 維持�
 - `window/window_controller.cpp`、`window/window_filters_menu.cpp`、`window/window_peer_menu.cpp`
 
 這些解析同時保留 Ayu GIF confirmation、sticker filter、link-warning 設定、plugin info、ID/registration date、AI button、custom badges、Message Shot theme、folder visibility、AyuForward callback，以及 upstream IV Markdown、communities、bot verification、ephemeral 與 normalized forward options。
+
+## 對抗覆核後修復（2026-07-13）
+
+35 個審查代理的對抗覆核發現數個合併回歸，以下為本輪修復，各為獨立 commit 並以本機 SSH signing key 簽章：
+
+- Anti-recall 資料庫升級清空（critical）：`ayu/data/entities.h` 的 `richMessageSerialized`/`richMessageSummary` 改為 `std::optional`，使 vendored sqlite_orm 視為 nullable 欄位並走 `ALTER TABLE ADD COLUMN`（`new_columns_added`）而非 drop-and-recreate，升級時保留既有 DeletedMessage/EditedMessage rows。`messages_storage.cpp`、`ayu/ui/message_history/history_item.cpp` 的讀寫點同步改用 optional 存取。
+- lib_ui `EntityInText::_local` 未初始化：submodule `ui/text/text_entity.h` 補回 `= false`，避免 `isLocal()` 與 defaulted 比較運算子讀取未初始化記憶體。
+- DeleteMessagesBox Ayu moderate 遺失：上游把邏輯搬到 `moderate_messages_box.cpp` 後，刪除自己 out() 訊息時的「刪除該使用者全部訊息」選項消失。於 `CalculateModerateOptions` 補回 self out()（`canDeleteMessages() && !isBroadcast()`）路徑；`delete_messages_box.cpp` 維持與上游 byte-identical，先前「逐段保留 Ayu 功能」的敘述已更正。
+- hideSimilarChannels 死開關：classic 與 tabbed 兩條 profile 路徑（`info_profile_shared_media_classic.cpp`、`info_profile_inner_widget.cpp`）補回 gate。
+- Rich edit 去重：`data_session.cpp` 以文字與 `RichPage` 等值判斷去重。
+- AyuForward partial 截斷轉傳：`ayu_sync.cpp`/`.h`、`ayu_forward.cpp` 在 partial page 時先用 `Iv::Instance::resolveRichMessage` 取全文再送 rich；取回失敗改走非靜默 fallback（以 flatten full page 或附加 `[message truncated]` 標記），並在等待期間重新以 `FullMsgId` 取回 item 避免 use-after-free。
+- Minor：ViewButton ripple 改回 `cache->bg2`；`HasSavableContent` 移除 `item->media()` 分支使 media-only 刪除訊息不再寫入空 row；未登入 intro 進入點改回 `Qr`；Message Shot 補收 `EmbedPost` 作者頭像；本機 `setRichPage` 保留既有 rich blob。
+
+跳過：`UseTelegramRichTranslation()` 與 `CreateTranslateProvider()` 的第二層 null-native fallback 不對稱，因鏡像該層需在 predicate 內建構 provider（副作用），非乾淨修法，暫予保留。
 
 ## 未執行的 generated outputs 與 CI
 

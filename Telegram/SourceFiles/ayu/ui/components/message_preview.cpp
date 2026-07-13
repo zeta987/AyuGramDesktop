@@ -71,7 +71,7 @@ MessagePreview::MessagePreview(
 		history,
 		history->session().userPeerId(),
 		FullMsgId(),
-		u"Update wehn?"_q);
+		u"什麼時候更新？"_q);
 
 	const auto ayugramUser = HistoryView::GenerateUser(
 		history,
@@ -86,7 +86,7 @@ MessagePreview::MessagePreview(
 			.messageId = _state->reply->data()->fullId(),
 		},
 		.date = base::unixtime::now() - 3600,
-	}, TextWithEntities{ u"You need to go outside and touch some grass..."_q },
+	}, TextWithEntities{ u"該出門走走、摸摸真實的草了……"_q },
 	MTP_messageMediaEmpty());
 
 	messageItem->setDeleted();
@@ -99,7 +99,7 @@ MessagePreview::MessagePreview(
 	auto edition = HistoryMessageEdition();
 	edition.editDate = base::unixtime::now();
 	edition.textWithEntities = TextWithEntities{
-		u"You need to go outside and touch some grass..."_q,
+		u"該出門走走、摸摸真實的草了……"_q,
 	};
 	edition.useSameViews = true;
 	edition.useSameForwards = true;

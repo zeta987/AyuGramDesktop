@@ -69,10 +69,7 @@ jobs:
           }
 
           $parts = $expectedVersion.Split('.')
-          $expectedNumber = (
-            ([int]$parts[0] * 1000000)
-            + ([int]$parts[1] * 1000)
-            + [int]$parts[2])
+          $expectedNumber = ([int]$parts[0] * 1000000) + ([int]$parts[1] * 1000) + [int]$parts[2]
           if ($values.AppVersionStr -ne $expectedVersion) {
             throw "Tag version $expectedVersion does not match AppVersionStr $($values.AppVersionStr)."
           }
@@ -88,8 +85,9 @@ jobs:
           }
 
           $header = Get-Content -LiteralPath $versionHeader -Raw
+          $versionStringPattern = 'AppVersionStr\s*=\s*"{0}";' -f ([regex]::Escape($expectedVersion))
           if ($header -notmatch "AppVersion\s*=\s*$expectedNumber;" -or
-              $header -notmatch "AppVersionStr\s*=\s*\"$([regex]::Escape($expectedVersion))\";") {
+              $header -notmatch $versionStringPattern) {
             throw 'core/version.h does not match Telegram/build/version.'
           }
 

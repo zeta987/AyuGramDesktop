@@ -4490,9 +4490,6 @@ void HistoryItem::applyLocalRichPage(
 }
 
 void HistoryItem::setRichPage(std::shared_ptr<const Iv::RichPage> page) {
-	// Preserve any existing serialized rich message blob so a local IV-editor
-	// apply (before the server echo arrives) does not strip anti-recall down to
-	// just the flattened summary.
 	setRichPage(std::move(page), richMessageSource());
 }
 

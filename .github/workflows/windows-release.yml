@@ -1,0 +1,294 @@
+name: Windows x64
+
+on:
+  push:
+    branches:
+      - release/current
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  REPO_NAME: AyuGramDesktop
+  PREPARE_PATH: Telegram/build/prepare/prepare.py
+  TDESKTOP_API_ID: '2040'
+  TDESKTOP_API_HASH: b18441a1ff607e10a989891a5462e627
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
+    env:
+      BUILD_CONFIG: ${{ startsWith(github.ref, 'refs/tags/') && 'Release' || (github.event_name == 'workflow_dispatch' && inputs.configuration || 'Debug') }}
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Prepare TBuild layout
+        run: |
+          mkdir "%USERPROFILE%\TBuild\Libraries"
+          mklink /d "%GITHUB_WORKSPACE%\TBuild" "%USERPROFILE%\TBuild"
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo SOURCE_DIR=%GITHUB_WORKSPACE%\TBuild\%REPO_NAME%>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - name: Checkout recursively
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          path: TBuild/AyuGramDesktop
+          persist-credentials: false
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tagName = $env:GITHUB_REF_NAME
+          if ($tagName -notmatch '^v(?<version>\d+\.\d+\.\d+)(?<suffix>-beta\.\d+)?$') {
+            throw "Unsupported release tag: $tagName"
+          }
+
+          $expectedVersion = $Matches.version
+          $isBeta = -not [string]::IsNullOrEmpty($Matches.suffix)
+          $versionFile = Join-Path $env:SOURCE_DIR 'Telegram/build/version'
+          $versionHeader = Join-Path $env:SOURCE_DIR 'Telegram/SourceFiles/core/version.h'
+          $values = @{}
+          foreach ($line in Get-Content -LiteralPath $versionFile) {
+            if ($line -match '^(?<name>\w+)\s+(?<value>\S+)$') {
+              $values[$Matches.name] = $Matches.value
+            }
+          }
+
+          $parts = $expectedVersion.Split('.')
+          $expectedNumber = (
+            ([int]$parts[0] * 1000000)
+            + ([int]$parts[1] * 1000)
+            + [int]$parts[2])
+          if ($values.AppVersionStr -ne $expectedVersion) {
+            throw "Tag version $expectedVersion does not match AppVersionStr $($values.AppVersionStr)."
+          }
+          if ([int]$values.AppVersion -ne $expectedNumber) {
+            throw "AppVersion $($values.AppVersion) does not match $expectedNumber."
+          }
+          if ($isBeta) {
+            if ($values.BetaChannel -ne '1' -or $values.AppVersionOriginal -ne "$expectedVersion.beta") {
+              throw 'Beta tag requires BetaChannel=1 and AppVersionOriginal=<version>.beta.'
+            }
+          } elseif ($values.BetaChannel -ne '0' -or $values.AppVersionOriginal -ne $expectedVersion) {
+            throw 'Stable tag requires BetaChannel=0 and an exact AppVersionOriginal.'
+          }
+
+          $header = Get-Content -LiteralPath $versionHeader -Raw
+          if ($header -notmatch "AppVersion\s*=\s*$expectedNumber;" -or
+              $header -notmatch "AppVersionStr\s*=\s*\"$([regex]::Escape($expectedVersion))\";") {
+            throw 'core/version.h does not match Telegram/build/version.'
+          }
+
+          git -C $env:SOURCE_DIR fetch origin release/current --no-tags
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch origin/release/current.'
+          }
+          git -C $env:SOURCE_DIR merge-base --is-ancestor $env:GITHUB_SHA origin/release/current
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The tag commit is not contained in origin/release/current.'
+          }
+
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            Authorization = "Bearer $env:GH_TOKEN"
+            'X-GitHub-Api-Version' = '2022-11-28'
+            'User-Agent' = 'AyuGram-Windows-Release'
+          }
+          $refUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tagName"
+          $tagRef = Invoke-RestMethod -Uri $refUri -Headers $headers
+          if ($tagRef.object.type -ne 'tag') {
+            throw 'Release tags must be annotated and signed; lightweight tags are rejected.'
+          }
+          $tagObject = Invoke-RestMethod -Uri $tagRef.object.url -Headers $headers
+          if (-not $tagObject.verification.verified) {
+            throw "GitHub did not verify the tag signature: $($tagObject.verification.reason)"
+          }
+          if ($tagObject.object.type -ne 'commit' -or $tagObject.object.sha -ne $env:GITHUB_SHA) {
+            throw 'The annotated tag target does not match GITHUB_SHA.'
+          }
+
+      - name: Compute dependency cache key
+        shell: bash
+        run: |
+          SDK="10.0.26100.0"
+          echo "SDK=$SDK" >> "$GITHUB_ENV"
+          sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          {
+            sha256sum "$TBUILD/$REPO_NAME/$PREPARE_PATH"
+            printf '%s\n' "$SDK"
+            printf '%s\n' 'qt6'
+          } > CACHE_KEY.txt
+          echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> "$GITHUB_ENV"
+
+      - name: Configure MSVC environment
+        uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
+        with:
+          arch: x64
+          sdk: ${{ env.SDK }}
+
+      - name: Configure NuGet sources
+        run: |
+          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
+          nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Restore ThirdParty cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: ${{ runner.os }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-third-party-
+
+      - name: Restore libraries cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.os }}-x64-libs-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-x64-libs-
+
+      - name: Restore Qt cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.os }}-x64-qt6-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-x64-qt6-
+
+      - name: Prepare libraries
+        run: |
+          if "%BUILD_CONFIG%"=="Release" (
+            call "%SOURCE_DIR%\Telegram\build\prepare\win.bat" silent qt6
+          ) else (
+            call "%SOURCE_DIR%\Telegram\build\prepare\win.bat" skip-release silent qt6
+          )
+          if errorlevel 1 exit /b %errorlevel%
+
+      - name: Configure and build
+        run: |
+          cd /d "%SOURCE_DIR%\Telegram"
+          set "ENABLE_LTO=OFF"
+          if "%BUILD_CONFIG%"=="Release" set "ENABLE_LTO=ON"
+          call configure.bat x64 qt6 ^
+            -D TDESKTOP_API_ID=%TDESKTOP_API_ID% ^
+            -D TDESKTOP_API_HASH=%TDESKTOP_API_HASH% ^
+            -D CMAKE_CONFIGURATION_TYPES=%BUILD_CONFIG% ^
+            -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
+            -D DESKTOP_APP_ENABLE_LTO=%ENABLE_LTO% ^
+            -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
+          if errorlevel 1 exit /b %errorlevel%
+          cmake --build ..\out --config %BUILD_CONFIG% --target Telegram --parallel
+          if errorlevel 1 exit /b %errorlevel%
+
+      - name: Package binaries
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:SOURCE_DIR "out\$env:BUILD_CONFIG"
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'artifact\AyuGram'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -LiteralPath (Join-Path $out 'AyuGram.exe') -Destination $stage
+          Copy-Item -LiteralPath (Join-Path $out 'Updater.exe') -Destination $stage
+
+          $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $stage 'AyuGram.exe')
+          $suffix = if ($env:IS_TAG -eq 'true') {
+            $env:GITHUB_REF_NAME
+          } else {
+            $env:GITHUB_SHA.Substring(0, 12)
+          }
+          $info = @(
+            "Commit=$env:GITHUB_SHA"
+            "Ref=$env:GITHUB_REF"
+            "Configuration=$env:BUILD_CONFIG"
+            "Authenticode=$($signature.Status)"
+          )
+          $info | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding ascii
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE "artifact\AyuGram-Windows-x64-$suffix.zip"
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $([System.IO.Path]::GetFileName($zip))" |
+            Set-Content -LiteralPath "$zip.sha256" -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: AyuGram-Windows-x64-${{ env.BUILD_CONFIG }}-${{ github.run_id }}
+          path: |
+            artifact/*.zip
+            artifact/*.sha256
+          if-no-files-found: error
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 90 || 14 }}
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: AyuGram-Windows-x64-Release-${{ github.run_id }}
+          path: release-assets
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          notes='Automated Windows x64 build. AyuGram.exe is not Authenticode-signed; verify the accompanying SHA-256 file before use.'
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            assets=(release-assets/*)
+            args=(
+              release create "$tag" "${assets[@]}"
+              --repo "$GITHUB_REPOSITORY"
+              --verify-tag
+              --title "AyuGram $tag"
+              --notes "$notes"
+              --generate-notes
+            )
+            if [[ "$tag" == *-beta.* ]]; then
+              args+=(--prerelease --latest=false)
+            else
+              args+=(--latest)
+            fi
+            gh "${args[@]}"
+          fi

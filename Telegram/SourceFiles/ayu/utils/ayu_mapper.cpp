@@ -56,15 +56,21 @@ std::vector<char> serializeObject(MTPObject object) {
 }
 
 template<typename MTPObject>
-MTPObject deserializeObject(std::vector<char> serialized) {
-	gsl::span<char> span(serialized.data(), serialized.size());
-
-	auto from = reinterpret_cast<const mtpPrime*>(span.data());
-	const auto end = from + span.size() / sizeof(mtpPrime);
+std::optional<MTPObject> deserializeObject(
+		const std::vector<char> &serialized) {
+	if (serialized.empty()
+		|| (serialized.size() % sizeof(mtpPrime)) != 0) {
+		return std::nullopt;
+	}
+	auto buffer = mtpBuffer();
+	buffer.resize(int(serialized.size() / sizeof(mtpPrime)));
+	memcpy(buffer.data(), serialized.data(), serialized.size());
+	auto from = buffer.constData();
+	const auto end = from + buffer.size();
 
 	MTPObject data;
-	if (!data.read(from, end)) {
-		LOG(("AyuMapper: Failed to deserialize object"));
+	if (!data.read(from, end) || from != end) {
+		return std::nullopt;
 	}
 	return data;
 }
@@ -90,7 +96,32 @@ std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<His
 }
 
 MTPVector<MTPMessageEntity> deserializeTextWithEntities(std::vector<char> serialized) {
-	return deserializeObject<MTPVector<MTPMessageEntity>>(serialized);
+	const auto result = deserializeObject<MTPVector<MTPMessageEntity>>(
+		serialized);
+	if (!result) {
+		if (!serialized.empty()) {
+			LOG(("AyuMapper: Failed to deserialize text entities"));
+		}
+		return {};
+	}
+	return *result;
+}
+
+std::vector<char> serializeRichMessage(const MTPRichMessage &message) {
+	return serializeObject(message);
+}
+
+auto deserializeRichMessage(
+		const std::vector<char> &serialized)
+-> std::shared_ptr<const MTPRichMessage> {
+	const auto result = deserializeObject<MTPRichMessage>(serialized);
+	if (!result) {
+		if (!serialized.empty()) {
+			LOG(("AyuMapper: Failed to deserialize rich message"));
+		}
+		return nullptr;
+	}
+	return std::make_shared<MTPRichMessage>(*result);
 }
 
 int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item) {

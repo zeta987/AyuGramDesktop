@@ -13,11 +13,16 @@
 #include "core/core_settings.h"
 #include "core/file_utilities.h"
 #include "data/data_document.h"
+#include "data/data_file_origin.h"
 #include "data/data_photo.h"
 #include "data/data_photo_media.h"
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "iv/editor/iv_editor_session.h"
+#include "iv/iv_instance.h"
+#include "iv/iv_rich_message_serializer.h"
+#include "iv/iv_rich_page.h"
 #include "main/main_session.h"
 #include "storage/file_download_mtproto.h"
 #include "storage/localimageloader.h"
@@ -239,6 +244,107 @@ void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&mess
 
 
 	waitForMsgSync(session, action);
+}
+
+RichSendOutcome sendRichMessageSync(
+		not_null<Main::Session*> session,
+		not_null<HistoryItem*> item,
+		const Api::SendAction &action,
+		Data::ForwardOptions options) {
+	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto outcome = std::make_shared<RichSendOutcome>();
+
+	crl::on_main([=] {
+		const auto finish = [=](RichSendResult value) {
+			outcome->status = value;
+			latch->countDown();
+		};
+		const auto plainOnly
+			= (options == Data::ForwardOptions::NoNamesAndCaptions)
+			|| !Iv::Editor::CanSendRichMessages(session);
+		const auto sendResolvedPage = [=](
+				std::shared_ptr<const Iv::RichPage> resolvedPage,
+				FullMsgId originId) {
+			if (plainOnly) {
+				outcome->flattenedFullText
+					= Iv::FlattenRichPageToSimpleText(*resolvedPage);
+				finish(RichSendResult::PlainFallback);
+				return;
+			}
+			const auto serialized = Iv::SerializeInputRichMessage(
+				session,
+				*resolvedPage,
+				Iv::SerializeInputRichMessageMode::FinalSubmit);
+			if (serialized.status != Iv::SerializeInputRichMessageStatus::Success
+				|| !serialized.value) {
+				outcome->flattenedFullText
+					= Iv::FlattenRichPageToSimpleText(*resolvedPage);
+				finish(RichSendResult::PlainFallback);
+				return;
+			}
+			session->api().sendRichMessage(
+				resolvedPage,
+				*serialized.value,
+				action,
+				Data::FileOrigin(originId),
+				false,
+				[=](bool success) {
+					if (!success) {
+						outcome->flattenedFullText
+							= Iv::FlattenRichPageToSimpleText(*resolvedPage);
+					}
+					finish(success
+						? RichSendResult::Succeeded
+						: RichSendResult::Failed);
+				});
+		};
+		const auto fullPage = item->fullRichPage();
+		const auto inlinePage = item->richPage();
+		if (!fullPage && !inlinePage) {
+			finish(RichSendResult::NoRichMessage);
+			return;
+		}
+		const auto page = fullPage
+			? fullPage
+			: (inlinePage && !inlinePage->part)
+			? inlinePage
+			: nullptr;
+		if (page) {
+			sendResolvedPage(page, item->fullId());
+			return;
+		}
+		const auto controller = session->tryResolveWindow();
+		if (!controller) {
+			LOG(("AyuForward: rich message full-page resolution failed, sending truncated fallback"));
+			finish(RichSendResult::PlainFallbackTruncated);
+			return;
+		}
+		const auto itemId = item->fullId();
+		Core::App().iv().resolveRichMessage(
+			not_null{ controller },
+			item,
+			[=](std::shared_ptr<const Iv::RichPage> resolved) {
+				const auto current = session->data().message(itemId);
+				if (!current) {
+					finish(RichSendResult::Pending);
+					return;
+				}
+				if (resolved && !resolved->part) {
+					sendResolvedPage(resolved, current->fullId());
+					return;
+				}
+				LOG(("AyuForward: rich message full-page resolution failed, sending truncated fallback"));
+				if (const auto fallbackPage = current->fullRichPage()) {
+					outcome->flattenedFullText
+						= Iv::FlattenRichPageToSimpleText(*fallbackPage);
+				}
+				finish(RichSendResult::PlainFallbackTruncated);
+			});
+	});
+
+	return latch->await(std::chrono::minutes(5))
+		? *outcome
+		: RichSendOutcome{ RichSendResult::Pending, std::nullopt };
 }
 
 void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action) {

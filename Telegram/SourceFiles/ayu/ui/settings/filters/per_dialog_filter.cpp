@@ -37,7 +37,7 @@ QString PerDialogFiltersListRow::generateName() {
 		this->setPeer(from);
 		return PeerListRow::generateName();
 	}
-	return QString("UNKNOWN (ID: %1)").arg(QString::number(peerId.value & PeerId::kChatTypeMask));
+	return u"未知（ID：%1）"_q.arg(QString::number(peerId.value & PeerId::kChatTypeMask));
 }
 
 PaintRoundImageCallback PerDialogFiltersListRow::generatePaintUserpicCallback(bool forceRound) {

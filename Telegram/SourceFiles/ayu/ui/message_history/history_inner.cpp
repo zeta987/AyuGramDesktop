@@ -556,10 +556,16 @@ void InnerWidget::elementOpenPhoto(
 }
 
 void InnerWidget::elementOpenDocument(
-	not_null<DocumentData*> document,
-	FullMsgId context,
-	bool showInMediaView) {
+		not_null<DocumentData*> document,
+		FullMsgId context,
+		bool showInMediaView) {
 	_controller->openDocument(document, showInMediaView, {context});
+}
+
+bool InnerWidget::elementScrollToLocalY(
+		not_null<const Element*> view,
+		int localTop) {
+	return false;
 }
 
 void InnerWidget::elementCancelUpload(const FullMsgId &context) {
@@ -571,6 +577,12 @@ void InnerWidget::elementCancelUpload(const FullMsgId &context) {
 void InnerWidget::elementShowTooltip(
 	const TextWithEntities &text,
 	Fn<void()> hiddenCallback) {
+}
+
+void InnerWidget::elementShowHiddenSenderTooltip(
+		FullMsgId itemId,
+		const TextWithEntities &text) {
+	_controller->showToast(TextWithEntities(text));
 }
 
 bool InnerWidget::elementAnimationsPaused() {

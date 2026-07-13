@@ -15,6 +15,8 @@
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
+#include "history/history_streamed_drafts.h"
+#include "iv/iv_rich_page.h"
 #include "main/main_session.h"
 
 namespace AyuMessages {
@@ -27,6 +29,17 @@ std::vector<AyuMessageBase> convertToBase(const std::vector<DerivedMessage> &mes
 		based.push_back(static_cast<AyuMessageBase>(msg));
 	}
 	return based;
+}
+
+bool IsStreamedDraft(not_null<HistoryItem*> item) {
+	const auto drafts = item->history()->streamedDraftsIfExists();
+	return drafts && drafts->contains(item);
+}
+
+bool HasSavableContent(const AyuMessageBase &message) {
+	return !message.text.empty()
+		|| (message.richMessageSerialized && !message.richMessageSerialized->empty())
+		|| (message.richMessageSummary && !message.richMessageSummary->empty());
 }
 
 void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
@@ -73,6 +86,20 @@ void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
 	auto serializedText = AyuMapper::serializeTextWithEntities(item);
 	message.text = serializedText.first;
 	message.textEntities = serializedText.second;
+	if (const auto source = item->richMessageSource()) {
+		message.richMessageSerialized = AyuMapper::serializeRichMessage(*source);
+	}
+	const auto fullRichPage = item->fullRichPage();
+	const auto richPage = fullRichPage
+		? fullRichPage
+		: item->richPage();
+	if (richPage) {
+		auto summary = Iv::FlattenRichPageSummary(richPage, false);
+		if (summary.text.isEmpty()) {
+			summary = Iv::FlattenRichPageToSimpleText(*richPage);
+		}
+		message.richMessageSummary = summary.text.toUtf8().toStdString();
+	}
 
 	// todo: implement mapping
 	message.mediaPath = "/";
@@ -85,10 +112,13 @@ void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
 }
 
 void addEditedMessage(not_null<HistoryItem *> item) {
+	if (IsStreamedDraft(item)) {
+		return;
+	}
 	EditedMessage message;
 	map(item, message);
 
-	if (message.text.empty()) {
+	if (!HasSavableContent(message)) {
 		return;
 	}
 
@@ -112,10 +142,13 @@ bool hasRevisions(not_null<HistoryItem*> item) {
 }
 
 void addDeletedMessage(not_null<HistoryItem*> item) {
+	if (IsStreamedDraft(item)) {
+		return;
+	}
 	DeletedMessage message;
 	map(item, message);
 
-	if (message.text.empty()) {
+	if (!HasSavableContent(message)) {
 		return;
 	}
 

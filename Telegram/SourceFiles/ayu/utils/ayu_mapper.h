@@ -6,16 +6,25 @@
 // Copyright @Radolyn, 2026
 #pragma once
 
+#include <memory>
+
+namespace tl {
+template <typename bare>
+class boxed;
+} // namespace tl
+
+class MTPrichMessage;
+using MTPRichMessage = tl::boxed<MTPrichMessage>;
+
 namespace AyuMapper {
-
-template<typename MTPObject>
-[[nodiscard]] MTPObject deserializeObject(std::vector<char> serialized);
-
-template<typename MTPObject>
-[[nodiscard]] std::vector<char> serializeObject(MTPObject object);
 
 std::pair<std::string, std::vector<char>> serializeTextWithEntities(not_null<HistoryItem*> item);
 [[nodiscard]] MTPVector<MTPMessageEntity> deserializeTextWithEntities(std::vector<char> serialized);
+[[nodiscard]] std::vector<char> serializeRichMessage(
+	const MTPRichMessage &message);
+[[nodiscard]] auto deserializeRichMessage(
+	const std::vector<char> &serialized)
+-> std::shared_ptr<const MTPRichMessage>;
 int mapItemFlagsToMTPFlags(not_null<HistoryItem*> item);
 
 } // namespace AyuMapper

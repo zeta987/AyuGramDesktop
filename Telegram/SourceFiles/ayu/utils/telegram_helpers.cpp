@@ -39,7 +39,9 @@
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
+#include "history/history_streamed_drafts.h"
 #include "history/history_unread_things.h"
+#include "iv/iv_rich_page.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -712,6 +714,10 @@ int getScheduleTime(int64 sumSize) {
 }
 
 bool isMessageSavable(const not_null<HistoryItem*> item) {
+	const auto drafts = item->history()->streamedDraftsIfExists();
+	if (drafts && drafts->contains(item)) {
+		return false;
+	}
 	const auto &settings = AyuSettings::getInstance();
 
 	if (!settings.saveDeletedMessages()) {
@@ -824,6 +830,11 @@ void searchPeerInner(const QString &peerId, Main::Session *session, const Userna
 				[&](const MTPDbotInlineMessageText &data)
 				{
 					return qs(data.vmessage());
+				},
+				[&](const MTPDbotInlineMessageRichMessage &data)
+				{
+					return Iv::FlattenRichPageSummary(
+						Iv::ParseRichPage(session, data.vrich_message())).text;
 				},
 				[&](const MTPDbotInlineMessageMediaGeo &data)
 				{
@@ -1341,6 +1352,11 @@ void getUserRegistrationDateInner(
 				[&](const MTPDbotInlineMessageText &data)
 				{
 					return qs(data.vmessage());
+				},
+				[&](const MTPDbotInlineMessageRichMessage &data)
+				{
+					return Iv::FlattenRichPageSummary(
+						Iv::ParseRichPage(session, data.vrich_message())).text;
 				},
 				[&](const MTPDbotInlineMessageMediaGeo &data)
 				{

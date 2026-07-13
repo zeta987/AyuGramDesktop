@@ -259,9 +259,18 @@ RichSendOutcome sendRichMessageSync(
 			outcome->status = value;
 			latch->countDown();
 		};
+		const auto plainOnly
+			= (options == Data::ForwardOptions::NoNamesAndCaptions)
+			|| !Iv::Editor::CanSendRichMessages(session);
 		const auto sendResolvedPage = [=](
 				std::shared_ptr<const Iv::RichPage> resolvedPage,
 				FullMsgId originId) {
+			if (plainOnly) {
+				outcome->flattenedFullText
+					= Iv::FlattenRichPageToSimpleText(*resolvedPage);
+				finish(RichSendResult::PlainFallback);
+				return;
+			}
 			const auto serialized = Iv::SerializeInputRichMessage(
 				session,
 				*resolvedPage,
@@ -295,15 +304,6 @@ RichSendOutcome sendRichMessageSync(
 			finish(RichSendResult::NoRichMessage);
 			return;
 		}
-		if (options == Data::ForwardOptions::NoNamesAndCaptions
-			|| !Iv::Editor::CanSendRichMessages(session)) {
-			if (fullPage) {
-				outcome->flattenedFullText
-					= Iv::FlattenRichPageToSimpleText(*fullPage);
-			}
-			finish(RichSendResult::PlainFallback);
-			return;
-		}
 		const auto page = fullPage
 			? fullPage
 			: (inlinePage && !inlinePage->part)
@@ -326,9 +326,6 @@ RichSendOutcome sendRichMessageSync(
 			[=](std::shared_ptr<const Iv::RichPage> resolved) {
 				const auto current = session->data().message(itemId);
 				if (!current) {
-					// Item was deleted while we waited for the full page.
-					// Skip it rather than plain-fallback, which would make the
-					// caller dereference the now-dangling original pointer.
 					finish(RichSendResult::Pending);
 					return;
 				}

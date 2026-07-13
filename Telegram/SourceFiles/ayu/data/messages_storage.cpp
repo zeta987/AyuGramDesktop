@@ -36,11 +36,10 @@ bool IsStreamedDraft(not_null<HistoryItem*> item) {
 	return drafts && drafts->contains(item);
 }
 
-bool HasSavableContent(
-		not_null<HistoryItem*> item,
-		const AyuMessageBase &message) {
+bool HasSavableContent(const AyuMessageBase &message) {
 	return !message.text.empty()
-		|| (message.richMessageSerialized && !message.richMessageSerialized->empty());
+		|| (message.richMessageSerialized && !message.richMessageSerialized->empty())
+		|| (message.richMessageSummary && !message.richMessageSummary->empty());
 }
 
 void map(not_null<HistoryItem*> item, AyuMessageBase &message) {
@@ -119,7 +118,7 @@ void addEditedMessage(not_null<HistoryItem *> item) {
 	EditedMessage message;
 	map(item, message);
 
-	if (!HasSavableContent(item, message)) {
+	if (!HasSavableContent(message)) {
 		return;
 	}
 
@@ -149,7 +148,7 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 	DeletedMessage message;
 	map(item, message);
 
-	if (!HasSavableContent(item, message)) {
+	if (!HasSavableContent(message)) {
 		return;
 	}
 

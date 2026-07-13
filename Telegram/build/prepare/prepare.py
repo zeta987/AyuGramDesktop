@@ -462,6 +462,7 @@ mac:
     git checkout 4aae812a405f47553e001faf566de572d3eccd16
 """)
 
+# NASM 3.02 stalls on libvpx CodeView 8 debug assembly; keep the tested 3.01 package.
 stage('msys64', """
 win:
     SET PATH=%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
@@ -477,9 +478,12 @@ win:
         make ^
         mingw-w64-x86_64-diffutils ^
         mingw-w64-x86_64-gperf ^
-        mingw-w64-x86_64-nasm ^
         mingw-w64-x86_64-perl ^
         mingw-w64-x86_64-pkgconf
+    pacman -U --noconfirm ^
+        https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-nasm-3.01-1-any.pkg.tar.zst
+    pacman -T mingw-w64-x86_64-nasm=3.01-1
+    mingw64\\bin\\nasm.exe --version
 """, 'ThirdParty')
 
 stage('python', """

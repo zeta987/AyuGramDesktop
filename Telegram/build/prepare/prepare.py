@@ -483,7 +483,7 @@ win:
     pacman -U --noconfirm ^
         https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-nasm-3.01-1-any.pkg.tar.zst
     pacman -T mingw-w64-x86_64-nasm=3.01-1
-    %THIRDPARTY_DIR%\\msys64\\mingw64\\bin\\nasm.exe --version
+    "%THIRDPARTY_DIR%\\msys64\\mingw64\\bin\\nasm.exe" --version
 """, 'ThirdParty')
 
 stage('python', """

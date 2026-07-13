@@ -444,8 +444,7 @@ bool Instance::isChineseLanguagePack() const {
 }
 
 bool Instance::isChineseContext() const {
-	return IsChineseLanguageId(systemLangCode())
-		|| isChineseLanguagePack();
+	return isChineseLanguagePack();
 }
 
 int Instance::version(Pack pack) const {

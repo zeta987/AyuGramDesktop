@@ -75,9 +75,14 @@ AyuLanguage::AyuLanguage() {
 	}, _lifetime);
 	Lang::GetInstance().updated(
 	) | rpl::on_next([this] {
+		if (_applyingBundledTaiwanChinese) {
+			return;
+		}
 		const auto &language = Lang::GetInstance();
-		if (!_applyingBundledTaiwanChinese && language.isChineseContext()) {
+		if (language.isChineseContext()) {
 			applyBundledTaiwanChinese();
+		} else {
+			resetBundledTaiwanChinese();
 		}
 	}, _lifetime);
 }

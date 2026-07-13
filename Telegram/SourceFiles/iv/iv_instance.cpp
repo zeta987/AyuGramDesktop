@@ -960,12 +960,16 @@ void Instance::trackSession(not_null<Main::Session*> session) {
 		_fullRequested.remove(session);
 		if (const auto i = _richMessageRequested.find(session)
 			; i != end(_richMessageRequested)) {
-			for (const auto &[itemId, requested] : i->second) {
+			auto pending = std::move(i->second);
+			_richMessageRequested.erase(i);
+			for (auto &[itemId, requested] : pending) {
 				if (requested.requestId) {
 					session->api().request(requested.requestId).cancel();
 				}
+				for (auto &callback : requested.callbacks) {
+					callback(nullptr);
+				}
 			}
-			_richMessageRequested.erase(i);
 		}
 		_ivCache.remove(session);
 		if (_ivRequestSession == session) {
@@ -1197,7 +1201,11 @@ void Instance::resolveRichMessage(
 			return;
 		}
 		session->api().request(requested.requestId).cancel();
+		auto superseded = std::move(requested.callbacks);
 		requested = RichMessageRequest();
+		for (auto &callback : superseded) {
+			callback(nullptr);
+		}
 	}
 	requested.callbacks.push_back(std::move(done));
 	const auto now = crl::now();

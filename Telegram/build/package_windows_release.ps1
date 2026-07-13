@@ -65,14 +65,14 @@ $status = @(Invoke-Git -Arguments @('status', '--porcelain'))
 if ($status.Count -ne 0) {
     throw "The repository is not clean:`n$($status -join "`n")"
 }
-$head = (Invoke-Git -Arguments @('rev-parse', 'HEAD'))[0].Trim()
-$tagType = (Invoke-Git -Arguments @('cat-file', '-t', $Tag))[0].Trim()
+$head = @(Invoke-Git -Arguments @('rev-parse', 'HEAD'))[0].Trim()
+$tagType = @(Invoke-Git -Arguments @('cat-file', '-t', $Tag))[0].Trim()
 if ($tagType -ne 'tag') {
     throw "$Tag must be an annotated tag."
 }
 [void](Invoke-Git -Arguments @('verify-commit', 'HEAD'))
 [void](Invoke-Git -Arguments @('verify-tag', $Tag))
-$tagCommit = (Invoke-Git -Arguments @('rev-list', '-n', '1', $Tag))[0].Trim()
+$tagCommit = @(Invoke-Git -Arguments @('rev-list', '-n', '1', $Tag))[0].Trim()
 if ($tagCommit -ne $head) {
     throw "Tag $Tag points to $tagCommit instead of HEAD $head."
 }

@@ -17,11 +17,12 @@ env:
   PREPARE_PATH: Telegram/build/prepare/prepare.py
   TDESKTOP_API_ID: '2040'
   TDESKTOP_API_HASH: b18441a1ff607e10a989891a5462e627
+  TOOLCHAIN_CACHE: vs2022-v143
 
 jobs:
   build:
     name: Build Windows x64
-    runs-on: windows-2025-vs2026
+    runs-on: windows-2022
     timeout-minutes: 360
     env:
       BUILD_CONFIG: Release
@@ -201,6 +202,56 @@ jobs:
           arch: x64
           sdk: ${{ env.SDK }}
 
+      - name: Verify VS 2022 ATL prerequisites
+        shell: pwsh
+        run: |
+          if ($env:VisualStudioVersion -notlike '17.*') {
+            throw "Expected Visual Studio 2022, got $env:VisualStudioVersion."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:VCToolsInstallDir) -or
+              [string]::IsNullOrWhiteSpace($env:VCToolsVersion) -or
+              [string]::IsNullOrWhiteSpace($env:WindowsSDKVersion)) {
+            throw 'MSVC developer environment is incomplete.'
+          }
+
+          $toolset = [version]($env:VCToolsVersion.TrimEnd('\'))
+          if ($toolset.Major -ne 14 -or
+              $toolset.Minor -lt 30 -or
+              $toolset.Minor -ge 50) {
+            throw "Expected the VS 2022 v143 toolset, got $env:VCToolsVersion."
+          }
+
+          $atlInclude = Join-Path $env:VCToolsInstallDir 'ATLMFC\include'
+          foreach ($headerName in @('atlbase.h', 'atlcomcli.h')) {
+            $atlHeader = Join-Path $atlInclude $headerName
+            if (-not (Test-Path -LiteralPath $atlHeader -PathType Leaf)) {
+              throw "ATL header is missing: $atlHeader"
+            }
+          }
+
+          $includeDirs = @(
+            $env:INCLUDE -split ';' |
+              Where-Object { $_ } |
+              ForEach-Object { $_.TrimEnd('\') }
+          )
+          if ($includeDirs -notcontains $atlInclude.TrimEnd('\')) {
+            throw "ATL directory is absent from INCLUDE: $atlInclude"
+          }
+
+          $actualSdk = $env:WindowsSDKVersion.TrimEnd('\')
+          if ($actualSdk -ne $env:SDK) {
+            throw "Expected Windows SDK $env:SDK, got $actualSdk."
+          }
+
+          $windowsHeader = Join-Path $env:WindowsSdkDir "Include\$actualSdk\um\windows.h"
+          if (-not (Test-Path -LiteralPath $windowsHeader -PathType Leaf)) {
+            throw "Windows SDK header is missing: $windowsHeader"
+          }
+
+          $compiler = Get-Command cl.exe -CommandType Application -ErrorAction Stop
+          Write-Host "MSVC=$($compiler.Source)"
+          Write-Host "VCTools=$env:VCToolsVersion SDK=$actualSdk ATL=$atlInclude"
+
       - name: Configure NuGet sources
         run: |
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
@@ -210,8 +261,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.os }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-third-party-
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ env.TOOLCHAIN_CACHE }}-third-party-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ env.TOOLCHAIN_CACHE }}-third-party-
 
       - name: Restore libraries cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -222,8 +273,8 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.os }}-x64-libs-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.os }}-x64-libs-
+          key: ${{ runner.os }}-x64-${{ env.TOOLCHAIN_CACHE }}-libs-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-x64-${{ env.TOOLCHAIN_CACHE }}-libs-
 
       - name: Restore Qt cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -231,8 +282,8 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.os }}-x64-qt6-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.os }}-x64-qt6-
+          key: ${{ runner.os }}-x64-${{ env.TOOLCHAIN_CACHE }}-qt6-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.os }}-x64-${{ env.TOOLCHAIN_CACHE }}-qt6-
 
       - name: Prepare libraries
         run: |

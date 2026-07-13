@@ -66,6 +66,7 @@ jobs:
             Join-Path $env:SOURCE_DIR 'Telegram/Resources/winrc/Updater.rc'
           )
           $appxManifest = Join-Path $env:SOURCE_DIR 'Telegram/Resources/uwp/AppX/AppxManifest.xml'
+          $changelogFile = Join-Path $env:SOURCE_DIR 'changelog.txt'
           $values = @{}
           foreach ($line in Get-Content -LiteralPath $versionFile) {
             if ($line -match '^(?<name>\w+)\s+(?<value>\S+)$') {
@@ -75,11 +76,26 @@ jobs:
 
           $parts = $expectedVersion.Split('.')
           $expectedNumber = ([int]$parts[0] * 1000000) + ([int]$parts[1] * 1000) + [int]$parts[2]
+          $expectedMajorVersion = "$($parts[0]).$($parts[1])"
+          $expectedSmallVersion = if ([int]$parts[2] -eq 0) {
+            $expectedMajorVersion
+          } else {
+            $expectedVersion
+          }
           if ($values.AppVersionStr -ne $expectedVersion) {
             throw "Tag version $expectedVersion does not match AppVersionStr $($values.AppVersionStr)."
           }
+          if ($values.AppVersionStrMajor -ne $expectedMajorVersion) {
+            throw "AppVersionStrMajor $($values.AppVersionStrMajor) does not match $expectedMajorVersion."
+          }
+          if ($values.AppVersionStrSmall -ne $expectedSmallVersion) {
+            throw "AppVersionStrSmall $($values.AppVersionStrSmall) does not match $expectedSmallVersion."
+          }
           if ([int]$values.AppVersion -ne $expectedNumber) {
             throw "AppVersion $($values.AppVersion) does not match $expectedNumber."
+          }
+          if ($values.AlphaVersion -ne '0') {
+            throw 'Release tags require AlphaVersion=0.'
           }
           if ($isBeta) {
             if ($values.BetaChannel -ne '1' -or $values.AppVersionOriginal -ne "$expectedVersion.beta") {
@@ -91,8 +107,13 @@ jobs:
 
           $header = Get-Content -LiteralPath $versionHeader -Raw
           $versionStringPattern = 'AppVersionStr\s*=\s*"{0}";' -f ([regex]::Escape($expectedVersion))
+          $expectedBetaLiteral = if ($isBeta) { 'true' } else { 'false' }
+          $betaPattern = 'AppBetaVersion\s*=\s*{0};' -f $expectedBetaLiteral
+          $alphaPattern = '(?m)^#define\s+TDESKTOP_REQUESTED_ALPHA_VERSION\s+\(0ULL\)\s*$'
           if ($header -notmatch "AppVersion\s*=\s*$expectedNumber;" -or
-              $header -notmatch $versionStringPattern) {
+              $header -notmatch $versionStringPattern -or
+              $header -notmatch $betaPattern -or
+              $header -notmatch $alphaPattern) {
             throw 'core/version.h does not match Telegram/build/version.'
           }
 
@@ -119,6 +140,17 @@ jobs:
           $appxPattern = 'Version="{0}"' -f [regex]::Escape($expectedResourceVersion)
           if ($appx -notmatch $appxPattern) {
             throw "AppxManifest.xml does not contain Version=$expectedResourceVersion."
+          }
+
+          $changelog = Get-Content -LiteralPath $changelogFile -Raw
+          $changelogPattern = if ($isBeta) {
+            '(?m)^{0}\s+beta\s+\(' -f [regex]::Escape($expectedVersion)
+          } else {
+            '(?m)^{0}\s+\(' -f [regex]::Escape($expectedVersion)
+          }
+          $changelogMatches = [regex]::Matches($changelog, $changelogPattern)
+          if ($changelogMatches.Count -ne 1) {
+            throw "changelog.txt must contain exactly one release heading for $tagName."
           }
 
           git -C $env:SOURCE_DIR fetch origin dev --no-tags

@@ -294,7 +294,8 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 			if (const auto user = _peer->asUser()) {
 				tabs.push_back(MakeCommonGroupsTabDescriptor(user));
 			}
-			if (_peer->asBot() || _peer->asBroadcast()) {
+			if ((_peer->asBot() || _peer->asBroadcast())
+				&& !AyuSettings::getInstance().hideSimilarChannels()) {
 				tabs.push_back(MakeSimilarPeersTabDescriptor(_peer));
 			}
 		}

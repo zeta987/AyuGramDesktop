@@ -40,8 +40,7 @@ bool HasSavableContent(
 		not_null<HistoryItem*> item,
 		const AyuMessageBase &message) {
 	return !message.text.empty()
-		|| !message.richMessageSerialized.empty()
-		|| item->media();
+		|| (message.richMessageSerialized && !message.richMessageSerialized->empty());
 }
 
 void map(not_null<HistoryItem*> item, AyuMessageBase &message) {

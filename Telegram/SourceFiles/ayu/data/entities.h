@@ -48,8 +48,8 @@ public:
 	std::vector<char> thumbsSerialized;
 	std::vector<char> documentAttributesSerialized;
 	std::string mimeType;
-	std::vector<char> richMessageSerialized;
-	std::string richMessageSummary;
+	std::optional<std::vector<char>> richMessageSerialized; // nullable
+	std::optional<std::string> richMessageSummary; // nullable
 };
 
 class DeletedMessage : public AyuMessageBase

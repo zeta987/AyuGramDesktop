@@ -120,7 +120,7 @@ void GenerateItems(
 			entities.v);
 	}
 	auto richMessage = AyuMapper::deserializeRichMessage(
-		message.richMessageSerialized);
+		message.richMessageSerialized.value_or(std::vector<char>{}));
 	auto richPage = richMessage
 		? Iv::ParseRichPage(&history->session(), *richMessage)
 		: nullptr;
@@ -131,11 +131,11 @@ void GenerateItems(
 	}
 	if (richPage) {
 		textAndEntities = Iv::FlattenRichPageSummary(richPage);
-	} else if (!message.richMessageSummary.empty()) {
+	} else if (message.richMessageSummary && !message.richMessageSummary->empty()) {
 		textAndEntities = Ui::Text::WithEntities(
 			QString::fromUtf8(
-				message.richMessageSummary.data(),
-				int(message.richMessageSummary.size())));
+				message.richMessageSummary->data(),
+				int(message.richMessageSummary->size())));
 	}
 	const auto item = makeSimpleTextMessage(std::move(textAndEntities));
 	if (richPage) {

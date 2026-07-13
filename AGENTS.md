@@ -1,14 +1,37 @@
 # Agent Guide for Telegram Desktop
 
-This guide defines repository-wide instructions for coding agents working with the Telegram Desktop codebase.
+This guide defines repository-wide instructions for coding agents working with
+the Telegram Desktop codebase and the zeta987 AyuGram fork.
 
-Avoid building the project.
+## AyuGram fork priorities
 
-If you're asked to create a Pull Request, then clearly state in PR description that it was AI generated.
+The active checkout is the native Windows repository at
+`D:\TBuild\tdesktop`. Read `docs/ayugram-local-development.md` before changing
+branches, submodules, build configuration, tags, or release assets.
 
-## Working from Codex on Windows + WSL
+- `dev` is the default integration and release-source branch.
+- Work on `feat/*` or `fix/*`, then produce a Debug EXE for developer
+  confirmation. Build Release only after that confirmation and after the
+  signed change is integrated into `dev`.
+- Do not start a build unless the user asks for one or the work has reached
+  the documented validation stage.
+- `origin` (`zeta987/AyuGramDesktop`) is the only writable superproject remote.
+  Treat `upstream`, `telegram`, and every other upstream as read-only.
+- Never push or create a Pull Request in an upstream repository. To modify an
+  external repo or submodule, create or reuse a `zeta987` fork first.
+- Create a Pull Request in a `zeta987` repository only when the user explicitly
+  asks. State in its description that it was AI generated.
+- Issues and PRDs belong only to `zeta987/AyuGramDesktop`; see
+  `docs/agents/issue-tracker.md`.
+- Engineering skills read their tracker, triage, and domain configuration from
+  `docs/agents/`.
 
-This checkout may be opened in Codex Desktop through the Windows UNC path `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop`, while the real Linux path is `/home/{user}/Telegram/tdesktop`. Treat it as a WSL/Linux checkout first, not as a native Windows checkout.
+## Alternate WSL checkouts
+
+The following rules apply only when a different checkout is opened through the
+Windows UNC path `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop`,
+whose real path is `/home/{user}/Telegram/tdesktop`. Treat that checkout as
+WSL/Linux. They do not override the native `D:\TBuild\tdesktop` procedure.
 
 - Prefer running repository-aware commands through WSL:
 
@@ -29,52 +52,73 @@ wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- <command>
 
 ## Build System Structure
 
-The build system expects this directory layout:
+The active native Windows build uses this directory layout:
 
 ```text
-L:\Telegram\                    # BuildPath
-L:\Telegram\tdesktop\           # Repository (you work here)
-L:\Telegram\Libraries\          # 32-bit dependencies (Linux/macOS)
-L:\Telegram\win64\Libraries\    # 64-bit dependencies (Windows)
-L:\Telegram\ThirdParty\         # Build tools (NuGet, Python, etc.)
+D:\TBuild\                       # BuildPath, not a Git repository
+D:\TBuild\tdesktop\              # Superproject repository
+D:\TBuild\Libraries\win64\       # Windows x64 dependencies
+D:\TBuild\ThirdParty\            # NuGet, Python, MSYS2, and build tools
+D:\TBuild\QtHostTools\           # Qt host tools used by prepare
+D:\TBuild\release\               # Local packaged release assets
 ```
 
-Dependencies are located relative to the repository: `../Libraries`, `../win64/Libraries`, or `../ThirdParty`.
+The configured build tree is `D:\TBuild\tdesktop\out`. Inspect its
+`CMakeCache.txt` instead of assuming compiler or Qt versions from an older
+guide.
 
 ## Build Configuration
 
-### Build Commands
+### Native Windows Debug build
 
-**From repository root, run:**
+After a feature or fix reaches its validation stage, build Debug first:
 
-```bash
-cmake --build out --config Debug --target Telegram
+```powershell
+cmake --build D:\TBuild\tdesktop\out `
+  --config Debug `
+  --target Telegram `
+  --parallel 4
 ```
 
-That's it. The `out/` directory is already configured. The executable will be at `out/Debug/Telegram.exe`.
+The executable is `D:\TBuild\tdesktop\out\Debug\AyuGram.exe`. Give this build
+to the developer for confirmation before integrating and releasing the change.
 
-**From WSL, run through the Linux Docker build environment:**
+### Native Windows Release build
+
+Release is allowed only after the developer confirms Debug and the signed
+change is integrated into a clean `dev`:
+
+```powershell
+cmake --build D:\TBuild\tdesktop\out `
+  --config Release `
+  --target Telegram `
+  --parallel 4
+```
+
+The executable is `D:\TBuild\tdesktop\out\Release\AyuGram.exe`. Package and
+publish it only through the procedure in
+`docs/ayugram-local-development.md`.
+
+### WSL build
+
+For a separate WSL/Linux checkout, use its Docker entry point only when the
+user requests a Linux build:
 
 ```bash
 Telegram/build/docker/centos_env/build_debug.sh
 ```
 
-**Important:** When running cmake from a shell that doesn't support `cd`, use quoted absolute paths:
-```bash
-cmake --build "l:\Telegram\tx64\out" --config Debug --target Telegram
-```
-
-**Never build Release** - it's extremely heavy and not needed for testing changes.
-
 ## Platform-Specific Requirements
 
 ### Windows
-- Requires Visual Studio 2022
+- The current `out` tree uses Visual Studio 18 2026, x64, and Qt 6.11.1.
+- Re-check `out/CMakeCache.txt` after any configure instead of hardcoding this
+  snapshot into scripts.
 - Must run from appropriate Native Tools Command Prompt:
   - "x64 Native Tools Command Prompt" for `win64`
   - "x86 Native Tools Command Prompt" for `win`
   - "ARM64 Native Tools Command Prompt" for `winarm`
-- Dependencies: `../win64/Libraries` (64-bit) or `../Libraries` (32-bit)
+- Native Windows x64 dependencies are under `D:\TBuild\Libraries\win64`.
 
 ### macOS
 - Requires Xcode
@@ -93,39 +137,39 @@ cmake --build "l:\Telegram\tx64\out" --config Debug --target Telegram
 ## Troubleshooting
 
 ### "Libraries not found"
-Ensure the repository is in `L:\Telegram\tdesktop`. The build system requires `../win64/Libraries` to exist.
+Ensure the repository is in `D:\TBuild\tdesktop` and that
+`D:\TBuild\Libraries\win64` exists.
 
 ### Build fails with "wrong command prompt"
 On Windows, use the correct Visual Studio Native Tools Command Prompt matching your target (x64/x86/ARM64).
 
 ### Build fails with PDB or EXE access errors
 
-**âš ï¸ CRITICAL: DO NOT RETRY THE BUILD. STOP AND WAIT FOR USER.**
+**Critical: do not retry the build until the locked process is closed.**
 
-If the build fails with ANY of these errors:
+If the build fails with any of these errors:
 - `fatal error C1041: cannot open program database`
-- `cannot open output file 'Telegram.exe'`
+- `cannot open output file 'AyuGram.exe'`
 - `LNK1104: cannot open file`
-- Any "access denied" or "file in use" error
+- Any "access denied" or "file in use" error.
 
-**STOP IMMEDIATELY.** These errors mean files are locked by a running process (Telegram.exe or debugger).
+Stop the build. These errors usually mean that `AyuGram.exe`, a debugger, or
+another build process still owns the output or PDB file.
 
-**What to do:**
-1. Do NOT attempt another build - it will fail the same way
-2. Do NOT try to delete files - they are locked
-3. Do NOT try any workarounds or fixes
-4. IMMEDIATELY inform the user:
+1. Record the exact locked path and error.
+2. Do not delete the output or retry the same build.
+3. Ask the user to close `AyuGram.exe` and any attached debugger.
+4. Wait for confirmation, verify that the process is gone, then retry once.
 
-> "Build failed - files are locked. Please close Telegram.exe (and any debugger) so I can rebuild."
+## Build practices
 
-**Then WAIT for user confirmation before attempting any build.**
-
-Retrying builds wastes time and context. The ONLY fix is for the user to close the running process.
-
-## Best Practices
-
-1. **Always use Debug builds** - Release builds are extremely heavy
-2. **Don't build Release configuration** - it's too heavy for testing
+- Use Debug for developer validation of each completed feature or fix.
+- Build Release only after the developer confirms Debug and the signed change
+  is integrated into a clean `dev`.
+- Never publish an unconfirmed Debug result or an untagged Release package.
+- Treat `.github/workflows/windows-release.yml` as a manual fallback. The normal
+  publication path is the signed local package procedure documented in
+  `docs/ayugram-local-development.md`.
 
 ## Text File Format
 
@@ -139,6 +183,10 @@ Retrying builds wastes time and context. The ONLY fix is for the user to close t
 - Add a short plain-language body only when the subject can't carry it (what was done, not the technical how) — a line or two at most.
 - Never add a `Co-Authored-By:` line or any tool/assistant attribution trailer.
 - Never add `Autotask:`/attempt or other workflow markers — commits read like normal history.
+- Sign every project and customized-submodule commit with `git commit -S`, then
+  verify it with `git verify-commit HEAD`.
+- Use signed annotated release tags that point at the verified `dev` commit.
+- Do not push commits, tags, or release assets until the user explicitly asks.
 
 ## Local Storage Serialization
 

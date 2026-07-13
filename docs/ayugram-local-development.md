@@ -1,7 +1,7 @@
 # AyuGram 本機開發與發布手冊
 
-> 最後核對：2026-07-14。此文件描述 `D:\TBuild` 的 Windows 原生
-> checkout，並作為後續 AI agent 的主要接手入口。
+> 最後核對：2026-07-14。此文件使用可攜路徑模型描述 Windows 原生
+> checkout；`D:\TBuild` 只代表目前電腦已驗證的歷史範例。
 
 ## 文件權限與適用範圍
 
@@ -9,9 +9,48 @@
 Release 程序。歷史研究文件可以提供背景，但如果內容與本文件或
 `AGENTS.md` 衝突，以目前 checkout、`AGENTS.md` 與本文件為準。
 
+全新電腦先依 `docs/building-win-x64.md` 安裝工具、選擇路徑、clone、prepare
+與 configure。本文件接續說明日常修改、Debug 驗收與本機 Release 發布。
+
 發布不是每次程式碼修改的自動後續。正常順序是先完成一個可測試段落，
 產出 Debug EXE 交給開發者確認；只有在開發者確認後，才能整合到 `dev`、
 本機建置 Release、建立簽署 tag 並上傳一般 GitHub Release。
+
+## 可攜路徑模型
+
+後續命令使用四個名稱，不綁定磁碟代號：
+
+| 名稱 | 定義 |
+| --- | --- |
+| `<BuildRoot>` | 使用者選定的短絕對路徑，目前 wrapper 要求路徑不含空白。 |
+| `<RepoRoot>` | superproject checkout，必須是 `<BuildRoot>` 的直接子目錄。 |
+| `<OutRoot>` | 固定為 `<RepoRoot>\out`。 |
+| `<ReleaseRoot>` | 建議為 `<BuildRoot>\release`，可以在封裝時明確覆寫。 |
+
+`Telegram/build/prepare/prepare.py` 會從自身位置往上推導 `<BuildRoot>`，所以
+repo 可以位於 C、D 或其他可寫磁碟，資料夾也不必命名為 `TBuild`，但不能把
+repo 與 `Libraries`、`ThirdParty` 拆到無關目錄。不要把另一台電腦的 `out`、
+`Libraries` 或 `ThirdParty` 複製過來當成新環境。
+
+在既有 checkout 中，先完成 `.git/index.lock` 檢查，再以
+`git rev-parse --show-toplevel` 找出 `<RepoRoot>`，其 parent 就是
+`<BuildRoot>`。含變數、引號、管線、反引號或多行邏輯的 PowerShell 命令必須
+存成暫存 `.ps1`，再用 `pwsh -NoProfile -File` 執行。
+
+## 秘密與個人資料規則
+
+- `TDESKTOP_API_ID` 與 `TDESKTOP_API_HASH` 只由使用者或核准的秘密管理工具
+  放入 process environment。agent 缺少任一值時必須停止並請使用者提供，
+  不可搜尋舊文件、猜測或重用 credential-shaped 範例。
+- 禁止把 API 欄位、GitHub token、私鑰、簽署密語、密碼、webhook 或完整
+  environment dump 寫入 Markdown、commit、issue、terminal history 或代理紀錄。
+- 禁止在持續性文件加入私人電子郵件、電話、Windows 帳號家目錄、hostname、
+  IP 位址或真實姓名。使用 `<BuildRoot>`、`<RepoRoot>`、`<fork-url>` 與
+  `<tag>` placeholder。
+- `zeta987` 是此專案公開的 repository owner，用於精確限制可寫遠端；不可由
+  這個公開 handle 延伸記錄任何私人身分資料。
+- `out/CMakeCache.txt` 可能包含 API 欄位與絕對本機路徑。即使 `out/` 已被
+  Git ignore，也禁止把 cache 上傳為診斷附件。
 
 ## 不可違反的遠端規則
 
@@ -41,11 +80,12 @@ Release 程序。歷史研究文件可以提供背景，但如果內容與本文
 其他 submodule 預設保持上游唯讀。修改任何其他 submodule 前，必須先建立
 對應的 `zeta987` fork，不可把只有本機才存在的 commit 寫入 superproject。
 
-## D:\TBuild 目錄地圖
+## 本機已驗證範例 D:\TBuild
 
-`D:\TBuild` 本身不是有效 Git repository；其中的空 `.git` 目錄不代表
-可提交的 repo。真正承載 `dev`、tags 與文件的 superproject 是
-`D:\TBuild\tdesktop`。
+以下只記錄 2026-07-14 這台開發電腦的狀態，方便後續 agent 在同一台電腦
+接手。其他電腦不得自動建立或選擇這些路徑。`D:\TBuild` 本身不是有效 Git
+repository；其中的空 `.git` 目錄不代表可提交的 repo。真正承載 `dev`、
+tags 與文件的 superproject 是 `D:\TBuild\tdesktop`。
 
 | 路徑 | 關係與用途 |
 | --- | --- |
@@ -55,13 +95,14 @@ Release 程序。歷史研究文件可以提供背景，但如果內容與本文
 | `D:\TBuild\tdesktop\out` | 已 configure 的 Visual Studio multi-config 建置樹。 |
 | `D:\TBuild\Libraries\win64` | Windows x64 依賴；目前 target Qt 是 6.11.1。 |
 | `D:\TBuild\ThirdParty` | prepare 使用的 Python、NuGet、MSYS2、jom 與 cache keys。 |
-| `D:\TBuild\QtHostTools` | prepare 留下的 Qt host-tool 資料；版本可能與 target Qt 不同，不可當成 target Qt 版本來源。 |
+| `D:\TBuild\QtHostTools` | 這台電腦的歷史 Qt host-tool 資料；目前 prepare、configure 與封裝器都不依賴它，不可當成 target Qt 版本來源。 |
 | `D:\TBuild\release` | 本機 Release 封裝輸出；不是 repo，現有資產不可由腳本自動覆蓋。 |
 | `D:\TBuild\ayu-debug-smoke` | 以 `-workdir` 啟動 Debug EXE 的乾淨煙霧測試資料夾。 |
 | `D:\TBuild\ayu-verify` | anti-recall 資料庫升級 fixture 與檢查腳本。 |
 | `D:\TBuild\.agents`, `.claude`, `.codex` | 本機代理設定與暫存狀態，不屬於 `tdesktop` commit。 |
 
-`D:\TBuild` 根目錄的重要歷史文件如下：
+這台電腦在 `D:\TBuild` 根目錄另有下列歷史文件；全新環境沒有這些檔案是
+正常狀態，repo 內的持續性文件才是可攜依據：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -93,7 +134,7 @@ repo 內與 Rich Messages 直接相關的持續性文件是
 | 項目 | 目前狀態與主要證據 |
 | --- | --- |
 | Telegram 6.9.4 Rich Messages | `feat/rich-messages-upstream-ed73b49` 已完成上游整合、AyuGram 衝突處理與兩輪修正，並由 `b303930a81b1` 整合進 `dev`。 |
-| anti-recall 資料庫升級 | 已修正升級時清空舊資料的問題；`D:\TBuild\ayu-verify` 保留 v1 fixture 與檢查工具。 |
+| anti-recall 資料庫升級 | 已修正升級時清空舊資料的問題；目前電腦的 `D:\TBuild\ayu-verify` 保留 v1 fixture 與檢查工具，但它不是 repo 或新環境的必要目錄。 |
 | Rich Messages 轉傳 fallback | 截斷後綴已改用 `ayu_ForwardTruncatedSuffix` 語言 key；rich-page 文字與 fallback 路徑位於 `Telegram/SourceFiles/ayu/features/forward`。 |
 | IV/Markdown 預覽視窗 | `Iv::Markdown::Controller::createWindow()` 在 `show()` 後呼叫 `setNativeFrame(false)`，避免 Windows 原生標題列在 resize 前殘留。 |
 | AyuGram 設定台灣正體中文 | `051471fb1bcc` 將翻譯分支整合到 `dev`，包含 AyuGram 設定與「實驗性設定」。 |
@@ -161,9 +202,31 @@ submodule 的實際 gitdir 通常位於 superproject 的 `.git\modules`，因此
 `.git` 可能是一個指向 gitdir 的文字檔。需要移除鎖檔時先用
 `git rev-parse --git-dir` 確認實際位置。
 
-## 本機建置環境
+## 提交前秘密與個資檢查
 
-2026-07-14 核對的既有 `out\CMakeCache.txt` 是：
+每次 commit 前先列出實際 staged paths，確認沒有 `out`、CMake cache、暫存
+`.ps1`、log、credential export 或 `<ReleaseRoot>` 資產。依
+`docs/building-win-x64.md#install-the-pinned-secret-scanner` 安裝並驗證固定的
+Gitleaks 8.30.1，掃描時必須啟用完整遮罩：
+
+```powershell
+& <BuildRoot>\Tools\gitleaks-8.30.1\gitleaks.exe git `
+    --staged --redact=100 --no-banner --no-color <RepoRoot>
+```
+
+掃描器沒有發現項目仍不足以證明不存在個人資料；還要人工檢查 staged diff
+中的私人電子郵件、Windows profile path、hostname、IP、電話、真實姓名與
+literal credential assignment。發現疑似秘密時，只回報類型、檔案與行號，
+不可把值本身印到 terminal 或對話。
+
+最後執行 `git diff --cached --check`、閱讀完整 staged diff、建立簽署 commit，
+再以 `git verify-commit HEAD` 驗證。既有上游或 CI 內 credential-shaped 常數
+不可直接複製到新文件；需要處理時先確認所有權與用途。
+
+## 目前電腦的建置快照
+
+以下只是 `D:\TBuild\tdesktop` 在 2026-07-14 核對的既有
+`out\CMakeCache.txt`，不可當成全新電腦的固定工具版本：
 
 | 設定 | 值 |
 | --- | --- |
@@ -178,8 +241,9 @@ submodule 的實際 gitdir 通常位於 superproject 的 `.git\modules`，因此
 `out`。不要因為只修改 `.cpp` 就重新 configure 或刪除 `out`；既有中介檔
 能讓下一次建置保持增量。
 
-如果真的需要重新 configure，API ID 與 API hash 必須由環境變數或本機私密
-設定傳入，不可把 credential-like 值寫進 Markdown、commit 或終端紀錄。
+如果需要重新 configure，先回到 `docs/building-win-x64.md` 的工具鏈 preflight
+與安全 configure 程序。API ID 與 API hash 必須由 process environment 傳入，
+不可把 credential-like 值寫進 Markdown、commit 或終端紀錄。
 Release 配置必須保持 `DESKTOP_APP_DISABLE_AUTOUPDATE=OFF` 與
 `DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF`。重現 `v6.9.4-beta.7` 時使用
 `DESKTOP_APP_ENABLE_LTO=OFF`；GitHub Actions 的 LTO 設定不同，不可混稱為
@@ -190,17 +254,14 @@ Release 配置必須保持 `DESKTOP_APP_DISABLE_AUTOUPDATE=OFF` 與
 只有在使用者要求建置，或工作已到達 Debug 驗證階段時才執行：
 
 ```powershell
-cmake --build D:\TBuild\tdesktop\out `
-  --config Debug `
-  --target Telegram `
-  --parallel 4
+cmake --build <RepoRoot>\out --config Debug --target Telegram --parallel 4
 ```
 
 產物是：
 
 ```text
-D:\TBuild\tdesktop\out\Debug\AyuGram.exe
-D:\TBuild\tdesktop\out\Debug\Updater.exe
+<RepoRoot>\out\Debug\AyuGram.exe
+<RepoRoot>\out\Debug\Updater.exe
 ```
 
 第一次缺少 Debug 中介檔時可能重新編譯大量檔案；同一 build tree 後續修改
@@ -224,18 +285,15 @@ D:\TBuild\tdesktop\out\Debug\Updater.exe
 submodule commit 已推到使用者 fork，而且工作目錄乾淨時執行：
 
 ```powershell
-cmake --build D:\TBuild\tdesktop\out `
-  --config Release `
-  --target Telegram `
-  --parallel 4
+cmake --build <RepoRoot>\out --config Release --target Telegram --parallel 4
 ```
 
 主要產物位於：
 
 ```text
-D:\TBuild\tdesktop\out\Release\AyuGram.exe
-D:\TBuild\tdesktop\out\Release\Updater.exe
-D:\TBuild\tdesktop\out\Release\modules\x64\d3d\d3dcompiler_47.dll
+<RepoRoot>\out\Release\AyuGram.exe
+<RepoRoot>\out\Release\Updater.exe
+<RepoRoot>\out\Release\modules\x64\d3d\d3dcompiler_47.dll
 ```
 
 目前 6.9.4 系列的 `AyuGram.exe` FileVersion 與 ProductVersion 都必須是
@@ -296,11 +354,16 @@ Telegram/build/package_windows_release.ps1
 
 ```powershell
 pwsh -NoProfile -File `
-  D:\TBuild\tdesktop\Telegram\build\package_windows_release.ps1 `
-  -Tag v6.9.4-beta.8
+  <RepoRoot>\Telegram\build\package_windows_release.ps1 `
+  -Tag v6.9.4-beta.8 `
+  -RepositoryRoot <RepoRoot> `
+  -OutputDirectory <ReleaseRoot>
 ```
 
-腳本預設輸出至 `D:\TBuild\release`，並驗證：
+將 placeholder 換成目前環境的絕對路徑後，把多行內容存成暫存 `.ps1` 再執行。
+腳本原本可以由 repo parent 推導輸出目錄，但發布時明確傳入
+`-RepositoryRoot` 與 `-OutputDirectory` 可以避免誤用另一個 checkout。腳本會
+驗證：
 
 - repo 乾淨。
 - HEAD commit 與 annotated tag 的簽章有效。
@@ -341,13 +404,13 @@ git push origin refs/tags/v6.9.4-beta.8
 
 ```powershell
 gh release create v6.9.4-beta.8 `
-  D:\TBuild\release\AyuGram-Windows-x64-v6.9.4-beta.8.zip `
-  D:\TBuild\release\AyuGram-Windows-x64-v6.9.4-beta.8.zip.sha256 `
-  D:\TBuild\release\AyuGram-Windows-x64-v6.9.4-beta.8-BUILD-INFO.txt `
+  <ReleaseRoot>\AyuGram-Windows-x64-v6.9.4-beta.8.zip `
+  <ReleaseRoot>\AyuGram-Windows-x64-v6.9.4-beta.8.zip.sha256 `
+  <ReleaseRoot>\AyuGram-Windows-x64-v6.9.4-beta.8-BUILD-INFO.txt `
   --repo zeta987/AyuGramDesktop `
   --verify-tag `
   --title "AyuGram v6.9.4-beta.8" `
-  --notes-file D:\TBuild\release\v6.9.4-beta.8-notes.md `
+  --notes-file <ReleaseRoot>\v6.9.4-beta.8-notes.md `
   --latest
 ```
 

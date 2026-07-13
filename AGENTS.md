@@ -5,9 +5,12 @@ the Telegram Desktop codebase and the zeta987 AyuGram fork.
 
 ## AyuGram fork priorities
 
-The active checkout is the native Windows repository at
-`D:\TBuild\tdesktop`. Read `docs/ayugram-local-development.md` before changing
-branches, submodules, build configuration, tags, or release assets.
+The active checkout is a native Windows repository, but its drive and parent
+directory are not fixed. Resolve the current repository root before using any
+path, and call it `<RepoRoot>`. Its direct parent is `<BuildRoot>`. Read
+`docs/building-win-x64.md` before preparing a new machine and read
+`docs/ayugram-local-development.md` before changing branches, submodules,
+build configuration, tags, or release assets.
 
 - `dev` is the default integration and release-source branch.
 - Work on `feat/*` or `fix/*`, then produce a Debug EXE for developer
@@ -29,21 +32,33 @@ branches, submodules, build configuration, tags, or release assets.
 ## Alternate WSL checkouts
 
 The following rules apply only when a different checkout is opened through the
-Windows UNC path `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop`,
-whose real path is `/home/{user}/Telegram/tdesktop`. Treat that checkout as
-WSL/Linux. They do not override the native `D:\TBuild\tdesktop` procedure.
+Windows UNC path
+`\\wsl.localhost\<distro>\home\<linux-user>\Telegram\tdesktop`, whose real
+path is `/home/<linux-user>/Telegram/tdesktop`. Treat that checkout as
+WSL/Linux. They do not override the native Windows procedure for the active
+checkout.
 
 - Prefer running repository-aware commands through WSL:
 
 ```powershell
-wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- <command>
+wsl.exe -d <distro> --cd /home/<linux-user>/Telegram/tdesktop -- <command>
 ```
 
 - PowerShell can read and write files through the UNC path, but native Windows tools may see different ownership, path, executable, or line-ending behavior than Linux tools.
 - Git from PowerShell over `\\wsl.localhost\...` can fail with `detected dubious ownership`. Use WSL Git instead. Do not change global Git `safe.directory` settings unless the user explicitly asks for that.
-- Keep path styles matched to the shell. Use `/home/{user}/Telegram/tdesktop/...` with WSL commands, and quoted `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop\...` paths with native Windows commands. Avoid passing UNC paths to Linux tools or Linux paths to native Windows tools unless the tool explicitly supports them.
-- If a command behaves strangely from the PowerShell UNC working directory, retry the same command through `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- ...` before concluding the repository or command is broken.
-- Recursive searches and repo inspection are usually faster and more faithful through WSL, for example `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- rg ...`.
+- Keep path styles matched to the shell. Use
+  `/home/<linux-user>/Telegram/tdesktop/...` with WSL commands, and quoted
+  `\\wsl.localhost\<distro>\home\<linux-user>\Telegram\tdesktop\...` paths
+  with native Windows commands. Avoid passing UNC paths to Linux tools or
+  Linux paths to native Windows tools unless the tool explicitly supports
+  them.
+- If a command behaves strangely from the PowerShell UNC working directory,
+  retry the same command through
+  `wsl.exe -d <distro> --cd /home/<linux-user>/Telegram/tdesktop -- ...`
+  before concluding the repository or command is broken.
+- Recursive searches and repo inspection are usually faster and more faithful
+  through WSL, for example
+  `wsl.exe -d <distro> --cd /home/<linux-user>/Telegram/tdesktop -- rg ...`.
 - Do not assume the WSL host has the build toolchain installed directly. In this setup, WSL may not have `cmake`, while Windows may have `cmake`, and the configured `out/` tree may still target the Linux Docker toolchain. Do not run native Windows `cmake --build out` against a Linux/Docker build tree.
 - For WSL/Linux builds, use the Docker build entry point from the repository root: `Telegram/build/docker/centos_env/build_debug.sh`. The Docker daemon must be reachable from WSL; checking `docker info` is fine, but do not start a build unless the user asked for one.
 - Existing build outputs may be Linux binaries, for example `out/Debug/Telegram` as an ELF executable, not `Telegram.exe`. Verify the build tree before assuming which platform produced it.
@@ -52,20 +67,25 @@ wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- <command>
 
 ## Build System Structure
 
-The active native Windows build uses this directory layout:
+The native Windows preparation scripts derive the build root from the parent
+of the repository. Use this portable layout on any drive:
 
 ```text
-D:\TBuild\                       # BuildPath, not a Git repository
-D:\TBuild\tdesktop\              # Superproject repository
-D:\TBuild\Libraries\win64\       # Windows x64 dependencies
-D:\TBuild\ThirdParty\            # NuGet, Python, MSYS2, and build tools
-D:\TBuild\QtHostTools\           # Qt host tools used by prepare
-D:\TBuild\release\               # Local packaged release assets
+<BuildRoot>\                      # Parent directory, not the superproject
+<BuildRoot>\<RepoFolder>\         # <RepoRoot>, the superproject repository
+<BuildRoot>\Libraries\win64\      # Windows x64 dependencies
+<BuildRoot>\ThirdParty\           # NuGet, Python, MSYS2, and build tools
+<BuildRoot>\release\              # Local packaged release assets
 ```
 
-The configured build tree is `D:\TBuild\tdesktop\out`. Inspect its
-`CMakeCache.txt` instead of assuming compiler or Qt versions from an older
-guide.
+`<RepoRoot>` must be a direct child of `<BuildRoot>` because
+`Telegram/build/prepare/prepare.py` walks from the script to that parent.
+The configured build tree is `<RepoRoot>\out`. Inspect its `CMakeCache.txt`
+instead of assuming compiler or Qt versions from another machine.
+
+The currently verified workstation happens to use `D:\TBuild\tdesktop`, but
+that path is only a local snapshot. Never create or select it automatically on
+another machine.
 
 ## Build Configuration
 
@@ -74,14 +94,11 @@ guide.
 After a feature or fix reaches its validation stage, build Debug first:
 
 ```powershell
-cmake --build D:\TBuild\tdesktop\out `
-  --config Debug `
-  --target Telegram `
-  --parallel 4
+cmake --build <RepoRoot>\out --config Debug --target Telegram --parallel 4
 ```
 
-The executable is `D:\TBuild\tdesktop\out\Debug\AyuGram.exe`. Give this build
-to the developer for confirmation before integrating and releasing the change.
+The executable is `<RepoRoot>\out\Debug\AyuGram.exe`. Give this build to the
+developer for confirmation before integrating and releasing the change.
 
 ### Native Windows Release build
 
@@ -89,14 +106,11 @@ Release is allowed only after the developer confirms Debug and the signed
 change is integrated into a clean `dev`:
 
 ```powershell
-cmake --build D:\TBuild\tdesktop\out `
-  --config Release `
-  --target Telegram `
-  --parallel 4
+cmake --build <RepoRoot>\out --config Release --target Telegram --parallel 4
 ```
 
-The executable is `D:\TBuild\tdesktop\out\Release\AyuGram.exe`. Package and
-publish it only through the procedure in
+The executable is `<RepoRoot>\out\Release\AyuGram.exe`. Package and publish it
+only through the procedure in
 `docs/ayugram-local-development.md`.
 
 ### WSL build
@@ -111,14 +125,19 @@ Telegram/build/docker/centos_env/build_debug.sh
 ## Platform-Specific Requirements
 
 ### Windows
-- The current `out` tree uses Visual Studio 18 2026, x64, and Qt 6.11.1.
-- Re-check `out/CMakeCache.txt` after any configure instead of hardcoding this
-  snapshot into scripts.
+- A fresh environment follows `docs/building-win-x64.md`: Visual Studio 2022,
+  MSVC v143, Windows SDK 10.0.26100.0, x64, and the Qt version selected by
+  `Telegram/build/qt_version.py`.
+- An existing `out` tree may use a separately validated compiler snapshot. The
+  current `D:\TBuild\tdesktop\out` uses Visual Studio 18 2026 and Qt 6.11.1.
+  Re-check `out/CMakeCache.txt` after every configure instead of copying those
+  values into portable scripts.
 - Must run from appropriate Native Tools Command Prompt:
   - "x64 Native Tools Command Prompt" for `win64`
   - "x86 Native Tools Command Prompt" for `win`
   - "ARM64 Native Tools Command Prompt" for `winarm`
-- Native Windows x64 dependencies are under `D:\TBuild\Libraries\win64`.
+- Native Windows x64 dependencies are under
+  `<BuildRoot>\Libraries\win64`.
 
 ### macOS
 - Requires Xcode
@@ -137,8 +156,10 @@ Telegram/build/docker/centos_env/build_debug.sh
 ## Troubleshooting
 
 ### "Libraries not found"
-Ensure the repository is in `D:\TBuild\tdesktop` and that
-`D:\TBuild\Libraries\win64` exists.
+Ensure `<RepoRoot>` is directly under `<BuildRoot>` and that
+`<BuildRoot>\Libraries\win64` exists. If the machine has not been prepared,
+follow `docs/building-win-x64.md`; do not copy dependency folders from a
+different toolchain snapshot.
 
 ### Build fails with "wrong command prompt"
 On Windows, use the correct Visual Studio Native Tools Command Prompt matching your target (x64/x86/ARM64).
@@ -176,6 +197,26 @@ another build process still owns the output or PDB file.
 - On Windows, keep project text files with CRLF line endings.
 - Do not save source, header, build/config, style, or localization files as UTF-8 with BOM. Use UTF-8 without BOM.
 - When rewriting project text files for normalization, preserve file content otherwise and do not introduce a BOM.
+
+## Secrets and personal data
+
+- Never commit or paste actual `TDESKTOP_API_ID`, `TDESKTOP_API_HASH`, GitHub
+  tokens, signing passphrases, private keys, passwords, or secret-manager
+  output. Read required build credentials from process environment variables
+  and keep generated CMake caches outside Git.
+- Do not put a person's real name, private email, phone number, home-directory
+  username, hostname, public IP address, or other machine-specific identifier
+  in repository documentation. Use placeholders such as `<BuildRoot>`,
+  `<RepoRoot>`, `<fork-url>`, and `<tag>`.
+- The public repository owner and remote names documented for this project are
+  intentional project identifiers. Do not infer or record additional personal
+  identity from them.
+- Never run commands that print credential values, such as `gh auth token` or
+  an unrestricted environment dump, into agent logs.
+- Before every commit, inspect the exact staged paths and run a secret scanner
+  with full redaction over the staged diff. Use the pinned Gitleaks version and
+  verified installation procedure in `docs/building-win-x64.md`. A clean
+  scanner result does not replace manual review for personal identifiers.
 
 ## Commits
 

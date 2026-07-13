@@ -59,8 +59,9 @@ scoop install ayugram
 
 #### Self-built
 
-Follow [official guide](https://github.com/AyuGram/AyuGramDesktop/blob/dev/docs/building-win-x64.md) if you want to
-build by yourself.
+Follow this fork's [portable Windows build guide](docs/building-win-x64.md) to
+create a build environment on any drive. Select a short absolute parent path
+without spaces, and keep the repository as its direct child.
 
 ### macOS
 

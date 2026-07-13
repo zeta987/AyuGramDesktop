@@ -1,9 +1,7 @@
-name: Windows x64
+name: Windows x64 manual fallback
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -312,7 +310,9 @@ jobs:
         run: |
           $out = Join-Path $env:SOURCE_DIR "out\$env:BUILD_CONFIG"
           $stage = Join-Path $env:GITHUB_WORKSPACE 'artifact\AyuGram'
+          $moduleDirectory = Join-Path $stage 'modules\x64\d3d'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          New-Item -ItemType Directory -Path $moduleDirectory -Force | Out-Null
 
           $tagMatch = [regex]::Match(
             $env:GITHUB_REF_NAME,
@@ -337,6 +337,9 @@ jobs:
             Copy-Item -LiteralPath $binaryPath -Destination $stage
           }
 
+          $modulePath = Join-Path $out 'modules\x64\d3d\d3dcompiler_47.dll'
+          Copy-Item -LiteralPath $modulePath -Destination $moduleDirectory
+
           $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $stage 'AyuGram.exe')
           $suffix = if ($env:IS_TAG -eq 'true') {
             $env:GITHUB_REF_NAME
@@ -353,7 +356,8 @@ jobs:
             "UpdaterFileVersion=$($binaryVersions['Updater.exe'])"
             "Authenticode=$($signature.Status)"
           )
-          $info | Set-Content -LiteralPath (Join-Path $stage 'BUILD-INFO.txt') -Encoding ascii
+          $infoPath = Join-Path $env:GITHUB_WORKSPACE "artifact\AyuGram-Windows-x64-$suffix-BUILD-INFO.txt"
+          $info | Set-Content -LiteralPath $infoPath -Encoding ascii
 
           $zip = Join-Path $env:GITHUB_WORKSPACE "artifact\AyuGram-Windows-x64-$suffix.zip"
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
@@ -368,6 +372,7 @@ jobs:
           path: |
             artifact/*.zip
             artifact/*.sha256
+            artifact/*-BUILD-INFO.txt
           if-no-files-found: error
           retention-days: 90
 

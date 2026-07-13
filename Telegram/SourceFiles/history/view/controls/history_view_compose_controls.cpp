@@ -4027,7 +4027,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 			? _scheduled->width()
 			: 0)
 		- ((_ttlInfo
-			&& !_ttlInfo->isHidden()
+			&& _ttlInfo->isVisible()
 			&& settings.showAutoDeleteButtonInMessageField())
 			? _ttlInfo->width()
 			: 0)

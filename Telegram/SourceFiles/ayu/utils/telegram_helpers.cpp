@@ -41,6 +41,7 @@
 #include "history/history_item_components.h"
 #include "history/history_streamed_drafts.h"
 #include "history/history_unread_things.h"
+#include "iv/iv_rich_page.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -830,6 +831,11 @@ void searchPeerInner(const QString &peerId, Main::Session *session, const Userna
 				{
 					return qs(data.vmessage());
 				},
+				[&](const MTPDbotInlineMessageRichMessage &data)
+				{
+					return Iv::FlattenRichPageSummary(
+						Iv::ParseRichPage(session, data.vrich_message())).text;
+				},
 				[&](const MTPDbotInlineMessageMediaGeo &data)
 				{
 					return QString();
@@ -1346,6 +1352,11 @@ void getUserRegistrationDateInner(
 				[&](const MTPDbotInlineMessageText &data)
 				{
 					return qs(data.vmessage());
+				},
+				[&](const MTPDbotInlineMessageRichMessage &data)
+				{
+					return Iv::FlattenRichPageSummary(
+						Iv::ParseRichPage(session, data.vrich_message())).text;
 				},
 				[&](const MTPDbotInlineMessageMediaGeo &data)
 				{

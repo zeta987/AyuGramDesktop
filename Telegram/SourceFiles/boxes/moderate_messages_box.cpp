@@ -113,6 +113,16 @@ struct ModerateOptions final {
 	return false;
 }
 
+[[nodiscard]] bool SuggestSelfDeleteAllReport(not_null<HistoryItem*> item) {
+	if (!item->out() || item->isPost()) {
+		return false;
+	}
+	const auto channel = item->history()->peer->asChannel();
+	return channel
+		&& channel->canDeleteMessages()
+		&& !channel->isBroadcast();
+}
+
 ModerateOptions CalculateModerateOptions(const HistoryItemsList &items) {
 	Expects(!items.empty());
 
@@ -142,7 +152,8 @@ ModerateOptions CalculateModerateOptions(const HistoryItemsList &items) {
 		if (!item->suggestBanReport()) {
 			result.banOrRestrict = false;
 		}
-		if (!item->suggestDeleteAllReport()) {
+		if (!item->suggestDeleteAllReport()
+			&& !SuggestSelfDeleteAllReport(item)) {
 			result.deleteAllMessages = false;
 		}
 		if (const auto p = item->from()) {

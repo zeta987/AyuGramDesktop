@@ -8906,7 +8906,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_CreationDateSelfApproximately" = "你大約在 **{item}** 建立帳號。";
 "ayu_CreationDateSelfEarlier" = "你的帳號建立時間早於 **{item}**。";
 "ayu_CreationDateSelfLater" = "你的帳號建立時間晚於 **{item}**。";
-"ayu_JoinDateChat" = "你在 **{item2}** 加入了 **{item1}**。";
+"ayu_JoinDateChat" = "你加入 **{item1}** 的日期是 **{item2}**。";
 "ayu_JumpToBeginning" = "跳至開頭";
 "ayu_ExpireMediaContextMenuText" = "銷毀";
 "ayu_ExpiringVoiceMessageNote" = "這則語音訊息可以不限次數播放。";

@@ -2907,10 +2907,13 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 	edit = HistoryMessageEdition(_session, data.c_message());
 	if (settings.saveMessagesHistory() && !existing->isLocal() && !existing->author()->isSelf() && !edit.isEditHide) {
 		const auto msg = existing->originalText();
-		const auto hasRichMessage = existing->richPage() || edit.richPage;
+		const auto textUnchanged = (edit.textWithEntities == msg || msg.empty());
+		const auto existingRich = existing->richPage();
+		const auto richUnchanged = existingRich
+			? (edit.richPage && Iv::RichPagesEqual(*existingRich, *edit.richPage))
+			: !edit.richPage;
 
-		if (!hasRichMessage
-			&& (edit.textWithEntities == msg || msg.empty())) {
+		if (textUnchanged && richUnchanged) {
 			goto proceed;
 		}
 

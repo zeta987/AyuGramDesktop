@@ -51,6 +51,7 @@ void CollectBlocks(
 	for (const auto &block : blocks) {
 		switch (block.kind) {
 		case BlockKind::Photo:
+		case BlockKind::EmbedPost:
 			AddPhoto(state, block.photo);
 			break;
 		case BlockKind::Video:

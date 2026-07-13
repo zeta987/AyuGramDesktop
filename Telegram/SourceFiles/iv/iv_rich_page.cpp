@@ -1060,7 +1060,6 @@ void RememberWebPageMedia(
 			anchorId,
 			anchorIds);
 	}, [&](const MTPDtextDiff &data) {
-		AssertIsDebug();
 		return AppendRichText(
 			data.vtext(),
 			result,
